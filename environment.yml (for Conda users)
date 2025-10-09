@@ -1,0 +1,19 @@
+name: ovarian-cancer-networks
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - pip
+  - numpy
+  - pandas
+  - matplotlib
+  - seaborn
+  - scikit-learn
+  - networkx
+  - jupyter
+  - pip:
+    - mysql-connector-python
+    - pyvis
+    - plotly
+    - python-louvain
