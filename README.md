@@ -1,40 +1,25 @@
-# Network_Construction_network_analysis-
-FULL-ANALYSIS
-thesis_repository/
-├── README.md
-├── requirements.txt
-├── setup.py
-├── src/
-│   ├── __init__.py
-│   ├── data_acquisition/
-│   │   ├── __init__.py
-│   │   ├── pathway_commons.py
-│   │   ├── celltalk_db.py
-│   │   ├── animal_tf.py
-│   │   └── tcga_ov.py
-│   ├── network_analysis/
-│   │   ├── __init__.py
-│   │   ├── boolean_networks.py
-│   │   ├── pagerank_analysis.py
-│   │   ├── random_walk.py
-│   │   └── centrality_measures.py
-│   ├── database/
-│   │   ├── __init__.py
-│   │   ├── schema.sql
-│   │   └── database_manager.py
-│   └── visualization/
-│       ├── __init__.py
-│       └── network_plots.py
-├── config/
-│   └── settings.py
-├── tests/
-│   ├── __init__.py
-│   ├── test_data_acquisition.py
-│   └── test_network_analysis.py
-├── scripts/
-│   ├── run_pipeline.py
-│   └── reproduce_analysis.py
-└── data/
-    ├── raw/
-    ├── processed/
-    └── results/
+# Ovarian Cancer Network Analysis Pipeline
+
+A reproducible computational pipeline for identifying key regulatory nodes in ovarian cancer signaling networks using integrated multi-omics data and network centrality analyses.
+
+## Research Hypotheses
+
+- **H1**: Integrated pipeline identifies key nodes with >80% convergence across methods
+- **H2**: Multi-omics integration reveals novel therapeutic targets  
+- **H3**: Methodology demonstrates ≥85% robustness under perturbation
+
+## Quick Start
+
+```bash
+# Clone repository
+git clone https://github.com/yourusername/ovarian-cancer-networks.git
+cd ovarian-cancer-networks
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run complete pipeline
+python scripts/run_pipeline.py
+
+# Run specific analysis
+python scripts/reproduce_analysis.py --analysis pagerank
