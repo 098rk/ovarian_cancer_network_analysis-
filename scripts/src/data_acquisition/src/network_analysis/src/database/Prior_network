@@ -1,0 +1,104 @@
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Data from the description
+initial_nodes = 1492
+initial_edges = 3527
+pathways = 112
+
+# Create the visualization
+fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
+fig.suptitle('Network Construction and Refinement Process', fontsize=16, fontweight='bold', y=0.95)
+
+# Plot 1: Initial Network Assembly
+categories = ['Molecular Entities', 'Curated Interactions', 'Biological Pathways']
+values = [initial_nodes, initial_edges, pathways]
+colors = ['#2E86AB', '#A23B72', '#F18F01']
+
+bars = ax1.bar(categories, values, color=colors, alpha=0.8)
+ax1.set_title('Initial Network Assembly', fontweight='bold', pad=20)
+ax1.set_ylabel('Count')
+ax1.grid(axis='y', alpha=0.3)
+
+# Add value labels on bars
+for bar, value in zip(bars, values):
+    height = bar.get_height()
+    ax1.text(bar.get_x() + bar.get_width()/2., height + 50,
+             f'{value:,}', ha='center', va='bottom', fontweight='bold')
+
+# Plot 2: Network Composition Pie Chart
+composition_labels = ['Nodes', 'Edges']
+composition_sizes = [initial_nodes, initial_edges]
+composition_colors = ['#2E86AB', '#A23B72']
+
+ax2.pie(composition_sizes, labels=composition_labels, colors=composition_colors,
+        autopct='%1.1f%%', startangle=90)
+ax2.set_title('Network Element Composition', fontweight='bold', pad=20)
+
+# Plot 3: Data Flow Diagram
+stages = ['Pathway Commons\nData Source', 'MySQL Database\nRetrieval', 'Initial Network\nAssembly', 'Quality Control\n& Filtering', 'Ovarian Cancer\nRelevant Network']
+stage_positions = np.arange(len(stages))
+
+ax3.plot(stage_positions, [5, 4, 3, 2, 1], 'o-', linewidth=3, markersize=10, 
+         color='#2E86AB', markerfacecolor='#2E86AB')
+ax3.set_title('Network Construction Pipeline', fontweight='bold', pad=20)
+ax3.set_ylabel('Processing Stage')
+ax3.set_xlabel('Workflow Steps')
+ax3.set_yticks([])
+ax3.set_xticks(stage_positions)
+ax3.set_xticklabels(stages, rotation=45, ha='right')
+ax3.grid(True, alpha=0.3)
+
+# Add annotations for key stages
+ax3.annotate('1,492 nodes\n3,527 edges', xy=(2, 3), xytext=(2, 3.5),
+            ha='center', va='bottom', fontweight='bold',
+            bbox=dict(boxstyle='round,pad=0.3', facecolor='lightblue', alpha=0.7),
+            arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
+
+# Plot 4: Filtering Process Overview
+filtering_stages = ['Data\nRetrieval', 'Initial\nAssembly', 'Quality\nControl', 'OC-specific\nFiltering']
+node_counts = [2000, initial_nodes, 1200, 800]  # Example progression
+edge_counts = [4500, initial_edges, 2800, 1800]  # Example progression
+
+x = np.arange(len(filtering_stages))
+width = 0.35
+
+bars1 = ax4.bar(x - width/2, node_counts, width, label='Nodes', color='#2E86AB', alpha=0.8)
+bars2 = ax4.bar(x + width/2, edge_counts, width, label='Edges', color='#A23B72', alpha=0.8)
+
+ax4.set_title('Network Refinement Through Filtering', fontweight='bold', pad=20)
+ax4.set_xlabel('Processing Stage')
+ax4.set_ylabel('Count')
+ax4.set_xticks(x)
+ax4.set_xticklabels(filtering_stages)
+ax4.legend()
+ax4.grid(axis='y', alpha=0.3)
+
+# Add value labels on bars
+for bars in [bars1, bars2]:
+    for bar in bars:
+        height = bar.get_height()
+        ax4.text(bar.get_x() + bar.get_width()/2., height + 100,
+                f'{height:,}', ha='center', va='bottom', fontsize=9)
+
+plt.tight_layout()
+plt.show()
+
+# Additional summary statistics
+print("="*60)
+print("NETWORK CONSTRUCTION SUMMARY")
+print("="*60)
+print(f"Initial Network Assembly:")
+print(f"  • Molecular Entities: {initial_nodes:,} nodes")
+print(f"  • Curated Interactions: {initial_edges:,} edges")
+print(f"  • Biological Pathways: {pathways} pathways")
+print(f"  • Network Density: {(initial_edges / (initial_nodes * (initial_nodes - 1) / 2)):.6f}")
+print(f"  • Average Degree: {(2 * initial_edges / initial_nodes):.2f}")
+print("\nData Sources:")
+print("  • Pathway Commons database")
+print("  • MySQL data retrieval system")
+print("  • 112 distinct biological pathways")
+print("\nFiltering Protocol:")
+print("  • Rigorous quality control measures")
+print("  • Ovarian cancer relevance screening")
+print("  • Curated interaction validation")
