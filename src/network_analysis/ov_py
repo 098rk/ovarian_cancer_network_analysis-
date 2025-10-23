@@ -1,0 +1,88 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.decomposition import PCA
+from scipy.stats import ttest_ind
+
+# Load UMAP dataset
+dumap_df = pd.read_csv("umap_projection.csv")
+print("UMAP Dataset Head:\n", dumap_df.head())
+print("\nSummary Statistics:\n", dumap_df.describe())
+
+if {'log2FoldChange', 'padj'}.issubset(dumap_df.columns):
+    dumap_df['Significant'] = (dumap_df['padj'] < 0.05) & (abs(dumap_df['log2FoldChange']) > 1)
+    print(f"\nNumber of significant genes: {dumap_df['Significant'].sum()}")
+    
+    plt.figure(figsize=(8, 6))
+    sns.scatterplot(data=dumap_df, x='log2FoldChange', y=-np.log10(dumap_df['padj']), hue='Significant', alpha=0.7)
+    plt.axhline(-np.log10(0.05), linestyle='--', color='red', label='p = 0.05')
+    plt.xlabel("Log2 Fold Change")
+    plt.ylabel("-Log10 Adjusted p-value")
+    plt.title("Volcano Plot")
+    plt.legend()
+    plt.show()
+
+plt.figure(figsize=(10, 8))
+sns.scatterplot(data=dumap_df, x='UMAP-1', y='UMAP-2', hue='Significant' if 'Significant' in dumap_df.columns else None, alpha=0.7)
+plt.title("UMAP Plot")
+plt.xlabel("UMAP-1")
+plt.ylabel("UMAP-2")
+plt.show()
+
+# Load t-SNE dataset
+tsne_df = pd.read_csv("tsne_projection.csv")
+print("t-SNE Dataset Head:\n", tsne_df.head())
+print("\nSummary Statistics:\n", tsne_df.describe())
+
+plt.figure(figsize=(10, 8))
+sns.scatterplot(data=tsne_df, x='TSNE-1', y='TSNE-2', hue='Significant' if 'Significant' in tsne_df.columns else None, alpha=0.7)
+plt.title("t-SNE Plot")
+plt.xlabel("TSNE-1")
+plt.ylabel("TSNE-2")
+plt.show()
+
+# Load PCA dataset for dispersion
+pca_disp_df = pd.read_csv("pca_dispersion.csv")
+print("\nSummary Statistics for Normalized.Dispersion:\n", pca_disp_df['Normalized.Dispersion'].describe())
+
+plt.figure(figsize=(10, 6))
+sns.histplot(pca_disp_df['Normalized.Dispersion'], bins=30, kde=True)
+plt.title('Distribution of Normalized.Dispersion')
+plt.xlabel('Normalized Dispersion')
+plt.ylabel('Frequency')
+plt.grid()
+plt.show()
+
+# PCA Projection
+df_pca_proj = pd.read_csv("pca_projection.csv")
+print("\nPCA Projection Dataset Head:\n", df_pca_proj.head())
+print("\nSummary Statistics:\n", df_pca_proj.describe())
+
+plt.figure(figsize=(10, 8))
+sns.scatterplot(data=df_pca_proj, x='PC-1', y='PC-2', alpha=0.7)
+plt.title("PCA Plot (PC-1 vs PC-2)")
+plt.xlabel("PC-1")
+plt.ylabel("PC-2")
+plt.show()
+
+# PCA Components
+df_pca_comp = pd.read_csv("pca_components.csv")
+print("\nPCA Components Dataset Head:\n", df_pca_comp.head())
+print("\nSummary Statistics:\n", df_pca_comp.describe())
+
+plt.figure(figsize=(12, 8))
+sns.boxplot(data=df_pca_comp.iloc[:, 1:], palette="Set3")
+plt.title("Boxplot of Gene Expression Levels")
+plt.xlabel("Genes")
+plt.ylabel("Expression Levels")
+plt.xticks(rotation=90)
+plt.show()
+
+correlation_matrix = df_pca_comp.iloc[:, 1:].corr()
+plt.figure(figsize=(12, 10))
+sns.heatmap(correlation_matrix, cmap="coolwarm", annot=False, fmt=".2f")
+plt.title("Gene Expression Correlation Matrix")
+plt.show()
+
+print("\nAnalysis Complete.")
