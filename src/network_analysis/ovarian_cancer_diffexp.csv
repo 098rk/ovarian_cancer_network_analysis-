@@ -1,0 +1,148 @@
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+
+# Load the dataset
+file_path = "D:\\ProjectFiles\\Geeks\saptial\\Parent_Visium_Human_OvarianCancer_analysis\\analysis\diffexp\\graphclust\\differential_expression.csv"
+df = pd.read_csv(file_path)
+
+# Define significance thresholds
+log2_fc_threshold = 1.5
+p_value_threshold = 0.05
+
+# Identify significant genes for each cluster
+significant_genes = {}
+for i in range(1, 9):  # Assuming clusters 1-8
+    sig_genes = df[(df[f'Cluster {i} Adjusted p value'] < p_value_threshold) &
+                    (df[f'Cluster {i} Log2 fold change'].abs() > log2_fc_threshold)]
+    significant_genes[f'Cluster {i}'] = sig_genes
+
+# Summary Statistics
+summary_stats = df.describe()
+print("Dataset Summary:\n", summary_stats)
+
+# Volcano Plot for a selected cluster (e.g., Cluster 1)
+plt.figure(figsize=(8, 6))
+sns.scatterplot(x=df['Cluster 1 Log2 fold change'],
+                y=-np.log10(df['Cluster 1 Adjusted p value']),
+                hue=df['Cluster 1 Adjusted p value'] < p_value_threshold,
+                palette={True: 'red', False: 'gray'}, alpha=0.7)
+plt.axhline(-np.log10(0.05), color='blue', linestyle='--', label='p=0.05')
+plt.axvline(-1.5, color='green', linestyle='--', label='Log2FC=-1.5')
+plt.axvline(1.5, color='green', linestyle='--', label='Log2FC=1.5')
+plt.xlabel('Log2 Fold Change')
+plt.ylabel('-Log10 Adjusted P-value')
+plt.title('Volcano Plot (Cluster 1)')
+plt.legend()
+plt.show()
+
+# Save significant genes per cluster to CSV
+for cluster, data in significant_genes.items():
+    data.to_csv(f"significant_genes_{cluster.replace(' ', '_')}.csv", index=False)
+
+print("Analysis complete. Significant gene lists saved.")
+import scipy.cluster.hierarchy as sch
+from sklearn.decomposition import PCA
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+from scipy.stats import ttest_ind
+
+# Define thresholds
+log2_fc_threshold = 1.5
+p_value_threshold = 0.05
+
+# Identify significant differentially expressed genes (DEGs) across all clusters
+significant_genes_all = {}
+for i in range(1, 9):
+    cluster_fc = f'Cluster {i} Log2 fold change'
+    cluster_pval = f'Cluster {i} Adjusted p value'
+
+    if cluster_fc in df.columns and cluster_pval in df.columns:
+        sig_genes = df[(df[cluster_pval] < p_value_threshold) & (df[cluster_fc].abs() > log2_fc_threshold)]
+        significant_genes_all[f'Cluster {i}'] = sig_genes
+
+# Summary statistics of log2 fold change values
+log2_fc_columns = [f'Cluster {i} Log2 fold change' for i in range(1, 9) if
+                   f'Cluster {i} Log2 fold change' in df.columns]
+summary_stats = df[log2_fc_columns].describe()
+
+# Volcano plot for one cluster (e.g., Cluster 1)
+plt.figure(figsize=(8, 6))
+sns.scatterplot(x=df['Cluster 1 Log2 fold change'],
+                y=-np.log10(df['Cluster 1 Adjusted p value']),
+                hue=df['Cluster 1 Adjusted p value'] < p_value_threshold,
+                palette={True: 'red', False: 'gray'}, alpha=0.7)
+plt.axhline(-np.log10(0.05), color='blue', linestyle='--', label='p=0.05')
+plt.axvline(-1.5, color='green', linestyle='--', label='Log2FC=-1.5')
+plt.axvline(1.5, color='green', linestyle='--', label='Log2FC=1.5')
+plt.xlabel('Log2 Fold Change')
+plt.ylabel('-Log10 Adjusted P-value')
+plt.title('Volcano Plot (Cluster 1)')
+plt.legend()
+plt.show()
+
+# Save significant genes per cluster
+for cluster, data in significant_genes_all.items():
+    # Change "/mnt/data/" to your actual directory path
+    file_name = r"D:\ProjectFiles\significant_genes_" + cluster.replace(' ', '_') + ".csv"
+    data.to_csv(file_name, index=False)
+
+    data.to_csv(file_name, index=False)
+
+# Perform t-tests between clusters to find statistically significant differences in expression
+ttest_results = {}
+for i in range(1, 8):  # Compare consecutive clusters
+    cluster_fc1 = f'Cluster {i} Log2 fold change'
+    cluster_fc2 = f'Cluster {i + 1} Log2 fold change'
+
+    if cluster_fc1 in df.columns and cluster_fc2 in df.columns:
+        t_stat, p_val = ttest_ind(df[cluster_fc1].dropna(), df[cluster_fc2].dropna(), equal_var=False)
+        ttest_results[f'Cluster {i} vs Cluster {i + 1}'] = {'t-statistic': t_stat, 'p-value': p_val}
+
+# Display t-test results
+ttest_results
+
+# 1. Hierarchical Clustering & Heatmap
+plt.figure(figsize=(10, 6))
+sns.heatmap(df[log2_fc_columns].dropna().T, cmap='coolwarm', center=0)
+plt.title("Heatmap of Log2 Fold Changes Across Clusters")
+plt.xlabel("Genes")
+plt.ylabel("Clusters")
+plt.show()
+
+# 2. Principal Component Analysis (PCA)
+pca = PCA(n_components=2)
+pca_result = pca.fit_transform(df[log2_fc_columns].dropna())
+df_pca = pd.DataFrame(pca_result, columns=['PC1', 'PC2'])
+
+plt.figure(figsize=(8, 6))
+sns.scatterplot(x=df_pca['PC1'], y=df_pca['PC2'], alpha=0.7)
+plt.xlabel("Principal Component 1")
+plt.ylabel("Principal Component 2")
+plt.title("PCA of Log2 Fold Changes Across Clusters")
+plt.show()
+
+# 3. Pathway Enrichment Analysis (Simulated)
+# (Since pathway databases like KEGG or Reactome require external tools, we'll simulate a gene set enrichment analysis)
+top_genes = df.nlargest(100, 'Cluster 1 Log2 fold change')['Feature Name'].tolist()  # Extract top genes from Cluster 1
+simulated_pathways = {gene: np.random.choice(['Cell Cycle', 'Apoptosis', 'Immune Response', 'Metabolism']) for gene in top_genes}
+
+# Convert to DataFrame
+pathway_df = pd.DataFrame(list(simulated_pathways.items()), columns=['Gene', 'Enriched Pathway'])
+pathway_counts = pathway_df['Enriched Pathway'].value_counts()
+
+# Plot pathway enrichment
+plt.figure(figsize=(8, 6))
+sns.barplot(x=pathway_counts.index, y=pathway_counts.values, hue=pathway_counts.index, palette='viridis', legend=False)
+
+plt.xticks(rotation=45)
+plt.xlabel("Enriched Pathways")
+plt.ylabel("Gene Count")
+plt.title("Simulated Pathway Enrichment Analysis")
+plt.show()
+
+# Save pathway enrichment results
+pathway_df.to_csv(r"D:\ProjectFiles\simulated_pathway_enrichment.csv", index=False)
