@@ -1,0 +1,204 @@
+
+import networkx as nx
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Define the unorganized Cell Cycle network edges
+cell_cycle_edges = [
+    ('Cyclin D', 'CDK4/6'),
+    ('Cyclin E', 'CDK2'),
+    ('Cyclin A', 'CDK2'),
+    ('Cyclin B', 'CDK1'),
+    ('Cyclin D/CDK4/6', 'Rb'),
+    ('Rb', 'E2F'),
+    ('Phosphorylated Rb', 'E2F'),
+    ('E2F', 'DNA replication genes'),
+    ('DNA damage', 'ATM/ATR'),
+    ('ATM/ATR', 'CHK1/CHK2'),
+    ('CHK1/CHK2', 'CDK1'),
+    ('CHK1/CHK2', 'CDK2'),
+    ('ATM/ATR', 'p53'),
+    ('p53', 'p21'),
+    ('p21', 'CDK4/6'),
+    ('p21', 'CDK2'),
+    ('Spindle checkpoint components', 'Anaphase progression'),
+    ('Mitotic Exit Network', 'Exit from Mitosis'),
+    ('Growth factors', 'Cyclin D')
+]
+
+# Define the unorganized MAPK network edges
+mapk_edges = [
+    ('EGFR', 'RAS'),
+    ('RAS', 'MEK'),
+    ('MEK', 'ERK'),
+    ('ERK', 'RSK'),
+    ('RSK', 'MYC'),
+    ('EGFR', 'PI3K'),
+    ('PI3K', 'AKT'),
+    ('AKT', 'mTOR'),
+    ('mTOR', 'p70S6K'),
+    ('ERK', 'CREB'),
+    ('ERK', 'ELK1'),
+    ('ERK', 'RSK'),
+    ('JNK', 'c-Jun'),
+    ('p38', 'ATF2'),
+    ('Ras', 'NF-kB')
+]
+
+# Create unorganized networks
+G_cell_cycle_unorganized = nx.DiGraph()
+G_mapk_unorganized = nx.DiGraph()
+
+# Add edges to the unorganized networks
+G_cell_cycle_unorganized.add_edges_from(cell_cycle_edges)
+G_mapk_unorganized.add_edges_from(mapk_edges)
+
+# Plot Cell Cycle Pathway separately (With Edges)
+plt.figure(figsize=(10, 8))
+pos_cell_cycle = nx.spring_layout(G_cell_cycle_unorganized, seed=42, k=1.5)  # Increase k for better node separation
+nx.draw(G_cell_cycle_unorganized, pos=pos_cell_cycle, with_labels=True, node_color='lightblue', edge_color='gray', node_size=2500, font_size=12, font_weight='bold', arrows=True)
+plt.title("Unorganized Cell Cycle Pathway (With Edges)", fontsize=14)
+plt.show()
+
+# Plot MAPK Signaling Pathway separately (With Edges)
+plt.figure(figsize=(10, 8))
+pos_mapk = nx.spring_layout(G_mapk_unorganized, seed=42, k=1.5)  # Increase k for better node separation
+nx.draw(G_mapk_unorganized, pos=pos_mapk, with_labels=True, node_color='lightgreen', edge_color='gray', node_size=2500, font_size=12, font_weight='bold', arrows=True)
+plt.title("Unorganized MAPK Signaling Pathway (With Edges)", fontsize=14)
+plt.show()
+
+# Define the unorganized Cell Cycle network nodes
+cell_cycle_nodes = [
+    'Cyclin D', 'CDK4/6', 'Cyclin E', 'CDK2', 'Cyclin A', 'Cyclin B', 'CDK1',
+    'Rb', 'E2F', 'Phosphorylated Rb', 'DNA replication genes', 'DNA damage',
+    'ATM/ATR', 'CHK1/CHK2', 'p53', 'p21', 'Spindle checkpoint components',
+    'Anaphase progression', 'Mitotic Exit Network', 'Exit from Mitosis', 'Growth factors'
+]
+
+# Define the unorganized MAPK network nodes
+mapk_nodes = [
+    'EGFR', 'RAS', 'MEK', 'ERK', 'RSK', 'MYC', 'PI3K', 'AKT', 'mTOR',
+    'p70S6K', 'CREB', 'ELK1', 'JNK', 'c-Jun', 'p38', 'ATF2', 'NF-kB'
+]
+
+# Create unorganized networks with only nodes
+G_cell_cycle_unorganized = nx.Graph()
+G_mapk_unorganized = nx.Graph()
+
+# Add nodes to the unorganized networks
+G_cell_cycle_unorganized.add_nodes_from(cell_cycle_nodes)
+G_mapk_unorganized.add_nodes_from(mapk_nodes)
+
+# Plot Cell Cycle Pathway separately (Nodes Only)
+plt.figure(figsize=(8, 6))
+pos_cell_cycle = nx.spring_layout(G_cell_cycle_unorganized, seed=42)  # Ensure nodes are not overlapping
+nx.draw(G_cell_cycle_unorganized, pos=pos_cell_cycle, with_labels=True, node_color='lightblue', node_size=2000, font_size=10)
+plt.title("Unorganized Cell Cycle Pathway (Nodes Only)")
+plt.show()
+
+# Plot MAPK Signaling Pathway separately (Nodes Only)
+plt.figure(figsize=(8, 6))
+pos_mapk = nx.spring_layout(G_mapk_unorganized, seed=42)  # Ensure nodes are not overlapping
+nx.draw(G_mapk_unorganized, pos=pos_mapk, with_labels=True, node_color='lightgreen', node_size=2000, font_size=10)
+plt.title("Unorganized MAPK Signaling Pathway (Nodes Only)")
+plt.show()
+
+# Random Walk Simulation
+def random_walk(G, start_node, num_steps):
+    current_node = start_node
+    visiting_counts = {node: 0 for node in G.nodes()}
+
+    for _ in range(num_steps):
+        visiting_counts[current_node] += 1
+        neighbors = list(G.neighbors(current_node))
+        if not neighbors:
+            break
+        current_node = np.random.choice(neighbors)
+
+    return visiting_counts
+
+# Boolean Model Simulation
+def boolean_model_simulation(G, timesteps=100):
+    activation_counts = {node: 0 for node in G.nodes()}
+    for _ in range(timesteps):
+        for node in G.nodes():
+            if np.random.rand() > 0.5:  # Random activation
+                activation_counts[node] += 1
+    return activation_counts
+
+# Add edges to the networks for analysis
+G_cell_cycle_unorganized.add_edges_from(cell_cycle_edges)
+G_mapk_unorganized.add_edges_from(mapk_edges)
+
+# Perform Random Walks
+num_walks = 1000
+num_steps = 50
+start_node_cell_cycle = 'Cyclin D'
+start_node_mapk = 'EGFR'
+
+total_visiting_counts_cell_cycle = {node: 0 for node in G_cell_cycle_unorganized.nodes()}
+total_visiting_counts_mapk = {node: 0 for node in G_mapk_unorganized.nodes()}
+
+for _ in range(num_walks):
+    counts_cell_cycle = random_walk(G_cell_cycle_unorganized, start_node_cell_cycle, num_steps)
+    counts_mapk = random_walk(G_mapk_unorganized, start_node_mapk, num_steps)
+
+    for node in total_visiting_counts_cell_cycle:
+        total_visiting_counts_cell_cycle[node] += counts_cell_cycle[node]
+
+    for node in total_visiting_counts_mapk:
+        total_visiting_counts_mapk[node] += counts_mapk[node]
+
+# Normalize visit counts
+for node in total_visiting_counts_cell_cycle:
+    total_visiting_counts_cell_cycle[node] /= num_walks
+
+for node in total_visiting_counts_mapk:
+    total_visiting_counts_mapk[node] /= num_walks
+
+# Boolean Model Simulation
+cell_cycle_boolean = boolean_model_simulation(G_cell_cycle_unorganized)
+mapk_boolean = boolean_model_simulation(G_mapk_unorganized)
+
+# PageRank Analysis
+cell_cycle_pagerank = nx.pagerank(G_cell_cycle_unorganized)
+mapk_pagerank = nx.pagerank(G_mapk_unorganized)
+
+# Centrality Measures
+cell_cycle_betweenness = nx.betweenness_centrality(G_cell_cycle_unorganized)
+mapk_betweenness = nx.betweenness_centrality(G_mapk_unorganized)
+
+# Motif Analysis
+cell_cycle_motifs = list(nx.triadic_census(G_cell_cycle_unorganized))
+mapk_motifs = list(nx.triadic_census(G_mapk_unorganized))
+
+# Print Results
+print("Cell Cycle Pathway - Random Walk Visit Counts:")
+print(total_visiting_counts_cell_cycle)
+
+print("MAPK Pathway - Random Walk Visit Counts:")
+print(total_visiting_counts_mapk)
+
+print("Cell Cycle Pathway - Boolean Model Activation:")
+print(cell_cycle_boolean)
+
+print("MAPK Pathway - Boolean Model Activation:")
+print(mapk_boolean)
+
+print("Cell Cycle Pathway - PageRank Scores:")
+print(cell_cycle_pagerank)
+
+print("MAPK Pathway - PageRank Scores:")
+print(mapk_pagerank)
+
+print("Cell Cycle Pathway - Betweenness Centrality:")
+print(cell_cycle_betweenness)
+
+print("MAPK Pathway - Betweenness Centrality:")
+print(mapk_betweenness)
+
+print("Cell Cycle Pathway - Triadic Motifs:")
+print(cell_cycle_motifs)
+
+print("MAPK Pathway - Triadic Motifs:")
+print(mapk_motifs)
