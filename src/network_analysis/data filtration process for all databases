@@ -1,0 +1,316 @@
+import pandas as pd
+import numpy as np
+from typing import Dict, List, Optional
+import logging
+
+# Set up logging to track filtration steps
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+class DataFilteringPipeline:
+    """
+    Comprehensive data filtering pipeline for biological databases
+    Implements quality control, redundancy removal, and data standardization
+    """
+    
+    def __init__(self):
+        self.filtering_stats = {}
+    
+    def filter_gdc_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Filter Genomics Data Commons (GDC) TCGA-OV dataset
+        """
+        logger.info("Starting GDC data filtration")
+        initial_count = len(df)
+        
+        # Remove duplicate samples
+        df = df.drop_duplicates(subset=['case_id', 'gene_id'], keep='first')
+        duplicates_removed = initial_count - len(df)
+        
+        # Filter out samples with low read depth (< 10 reads)
+        if 'read_depth' in df.columns:
+            df = df[df['read_depth'] >= 10]
+        
+        # Remove samples with missing critical information
+        critical_columns = ['gene_id', 'gene_symbol', 'expression_value']
+        df = df.dropna(subset=critical_columns)
+        
+        # Filter out genes with extremely low expression (potential noise)
+        if 'expression_value' in df.columns:
+            expression_threshold = df['expression_value'].quantile(0.01)  # Remove bottom 1%
+            df = df[df['expression_value'] >= expression_threshold]
+        
+        # Remove samples with poor quality metrics
+        quality_filters = [
+            ('mapping_quality', 20),  # Minimum mapping quality
+            ('alignment_rate', 0.8),  # Minimum alignment rate
+        ]
+        
+        for column, threshold in quality_filters:
+            if column in df.columns:
+                df = df[df[column] >= threshold]
+        
+        final_count = len(df)
+        self.filtering_stats['GDC'] = {
+            'initial_samples': initial_count,
+            'final_samples': final_count,
+            'duplicates_removed': duplicates_removed,
+            'filtered_out': initial_count - final_count
+        }
+        
+        logger.info(f"GDC filtration complete: {final_count}/{initial_count} samples retained")
+        return df
+    
+    def filter_pathway_commons_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Filter Pathway Commons dataset for high-confidence interactions
+        """
+        logger.info("Starting Pathway Commons data filtration")
+        initial_count = len(df)
+        
+        # Remove duplicate interactions
+        df = df.drop_duplicates(subset=['PARTICIPANT_A', 'INTERACTION_TYPE', 'PARTICIPANT_B'])
+        
+        # Filter by interaction types relevant to signaling
+        valid_interaction_types = [
+            'controls-state-change',
+            'controls-phosphorylation', 
+            'controls-transport',
+            'controls-expression',
+            'in-complex-with',
+            'interacts-with'
+        ]
+        df = df[df['INTERACTION_TYPE'].isin(valid_interaction_types)]
+        
+        # Filter for KEGG pathways only
+        df = df[df['PATHWAY_NAMES'].str.contains('KEGG', na=False)]
+        
+        # Require PubMed support for interactions
+        df = df[df['INTERACTION_PUBMED_ID'].notna()]
+        
+        # Remove interactions with missing participants
+        df = df.dropna(subset=['PARTICIPANT_A', 'PARTICIPANT_B'])
+        
+        # Filter out self-interactions
+        df = df[df['PARTICIPANT_A'] != df['PARTICIPANT_B']]
+        
+        final_count = len(df)
+        self.filtering_stats['Pathway_Commons'] = {
+            'initial_interactions': initial_count,
+            'final_interactions': final_count,
+            'filtered_out': initial_count - final_count
+        }
+        
+        logger.info(f"Pathway Commons filtration complete: {final_count}/{initial_count} interactions retained")
+        return df
+    
+    def filter_celltalk_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Filter CellTalkDB ligand-receptor interaction data
+        """
+        logger.info("Starting CellTalkDB data filtration")
+        initial_count = len(df)
+        
+        # Standardize column names
+        column_mapping = {
+            'ligand_gene_symbol': 'ligand_symbol',
+            'receptor_gene_symbol': 'receptor_symbol', 
+            'ligand_gene_id': 'ligand_id',
+            'receptor_gene_id': 'receptor_id'
+        }
+        df = df.rename(columns={k: v for k, v in column_mapping.items() if k in df.columns})
+        
+        # Remove duplicate ligand-receptor pairs
+        df = df.drop_duplicates(subset=['ligand_symbol', 'receptor_symbol'])
+        
+        # Filter for human-specific interactions
+        if 'species' in df.columns:
+            df = df[df['species'] == 'Homo sapiens']
+        
+        # Select only relevant columns for analysis
+        relevant_columns = [
+            'ligand_symbol', 'receptor_symbol', 'ligand_id', 'receptor_id',
+            'evidence', 'interaction_score'
+        ]
+        df = df[[col for col in relevant_columns if col in df.columns]]
+        
+        # Remove interactions with missing critical information
+        critical_columns = ['ligand_symbol', 'receptor_symbol']
+        df = df.dropna(subset=critical_columns)
+        
+        # Filter by evidence strength if available
+        if 'evidence' in df.columns:
+            # Keep only high-confidence evidence types
+            high_confidence_evidence = ['experimental', 'curated', 'manual']
+            df = df[df['evidence'].isin(high_confidence_evidence)]
+        
+        final_count = len(df)
+        self.filtering_stats['CellTalkDB'] = {
+            'initial_pairs': initial_count,
+            'final_pairs': final_count,
+            'filtered_out': initial_count - final_count
+        }
+        
+        logger.info(f"CellTalkDB filtration complete: {final_count}/{initial_count} pairs retained")
+        return df
+    
+    def filter_animaltfdb_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Filter AnimalTFDB transcription factor data
+        """
+        logger.info("Starting AnimalTFDB data filtration")
+        initial_count = len(df)
+        
+        # Filter for human transcription factors only
+        df = df[df['Species'] == 'Homo sapiens']
+        
+        # Remove duplicate TFs
+        df = df.drop_duplicates(subset=['Symbol', 'Ensembl'])
+        
+        # Standardize column names and select relevant columns
+        column_mapping = {
+            'Symbol': 'tf_symbol',
+            'Ensembl': 'ensembl_id',
+            'Family': 'tf_family',
+            'Entrez_ID': 'entrez_id'
+        }
+        df = df.rename(columns={k: v for k, v in column_mapping.items() if k in df.columns})
+        
+        # Remove TFs with missing critical identifiers
+        critical_columns = ['tf_symbol', 'ensembl_id']
+        df = df.dropna(subset=critical_columns)
+        
+        # Filter out pseudogenes and non-protein coding genes if information available
+        if 'Gene_type' in df.columns:
+            df = df[~df['Gene_type'].str.contains('pseudogene', na=False)]
+        
+        final_count = len(df)
+        self.filtering_stats['AnimalTFDB'] = {
+            'initial_tfs': initial_count,
+            'final_tfs': final_count,
+            'filtered_out': initial_count - final_count
+        }
+        
+        logger.info(f"AnimalTFDB filtration complete: {final_count}/{initial_count} TFs retained")
+        return df
+    
+    def apply_mutation_based_filtering(self, network_df: pd.DataFrame, 
+                                    mutation_data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Apply mutation-based filtering to prioritize cancer-relevant interactions
+        """
+        logger.info("Applying mutation-based filtering")
+        
+        # Calculate mutation frequencies
+        mutation_freq = mutation_data.groupby('gene_id').size() / len(mutation_data['case_id'].unique())
+        mutation_freq = mutation_freq.reset_index()
+        mutation_freq.columns = ['gene_id', 'mutation_frequency']
+        
+        # Merge mutation data with network
+        network_df = network_df.merge(
+            mutation_freq, 
+            left_on='PARTICIPANT_A', 
+            right_on='gene_id', 
+            how='left'
+        )
+        network_df = network_df.rename(columns={'mutation_frequency': 'mutation_freq_A'})
+        
+        network_df = network_df.merge(
+            mutation_freq,
+            left_on='PARTICIPANT_B', 
+            right_on='gene_id', 
+            how='left'
+        )
+        network_df = network_df.rename(columns={'mutation_frequency': 'mutation_freq_B'})
+        
+        # Calculate combined mutation score for interactions
+        network_df['mutation_score'] = (
+            network_df['mutation_freq_A'].fillna(0) * 
+            network_df['mutation_freq_B'].fillna(0)
+        )
+        
+        # Filter interactions based on mutation relevance
+        mutation_threshold = network_df['mutation_score'].quantile(0.75)  # Top 25%
+        high_mutation_interactions = network_df[network_df['mutation_score'] >= mutation_threshold]
+        
+        logger.info(f"Mutation filtering: {len(high_mutation_interactions)} high-mutation interactions identified")
+        return high_mutation_interactions
+    
+    def generate_filtering_report(self) -> Dict:
+        """
+        Generate comprehensive report of filtering results
+        """
+        report = {
+            'total_initial_data': sum(stats.get('initial_samples', stats.get('initial_interactions', 
+                                     stats.get('initial_pairs', stats.get('initial_tfs', 0)))) 
+                                     for stats in self.filtering_stats.values()),
+            'total_final_data': sum(stats.get('final_samples', stats.get('final_interactions', 
+                                   stats.get('final_pairs', stats.get('final_tfs', 0)))) 
+                                   for stats in self.filtering_stats.values()),
+            'database_specific_stats': self.filtering_stats
+        }
+        
+        logger.info("=== FILTERING REPORT ===")
+        for db, stats in self.filtering_stats.items():
+            initial = stats.get('initial_samples', stats.get('initial_interactions', 
+                              stats.get('initial_pairs', stats.get('initial_tfs', 0))))
+            final = stats.get('final_samples', stats.get('final_interactions', 
+                            stats.get('final_pairs', stats.get('final_tfs', 0))))
+            filtered_out = stats.get('filtered_out', initial - final)
+            
+            logger.info(f"{db}: {final}/{initial} retained ({filtered_out} filtered out)")
+        
+        total_retention = (report['total_final_data'] / report['total_initial_data']) * 100
+        logger.info(f"Overall data retention: {total_retention:.2f}%")
+        
+        return report
+
+# Example usage and demonstration
+def main():
+    """
+    Demonstration of the complete data filtering pipeline
+    """
+    pipeline = DataFilteringPipeline()
+    
+    # Example: Loading and filtering simulated data
+    # In practice, these would be loaded from actual CSV files
+    
+    # Simulate GDC data loading and filtering
+    try:
+        gdc_data = pd.read_csv('gdc_tcga_ov.csv')
+        filtered_gdc = pipeline.filter_gdc_data(gdc_data)
+        filtered_gdc.to_csv('filtered_gdc_data.csv', index=False)
+    except FileNotFoundError:
+        logger.warning("GDC data file not found - skipping GDC filtration demo")
+    
+    # Simulate Pathway Commons data filtering
+    try:
+        pc_data = pd.read_csv('pathway_commons_data.csv', sep='\t')
+        filtered_pc = pipeline.filter_pathway_commons_data(pc_data)
+        filtered_pc.to_csv('filtered_pathway_commons.csv', index=False)
+    except FileNotFoundError:
+        logger.warning("Pathway Commons data file not found - skipping PC filtration demo")
+    
+    # Simulate CellTalkDB data filtering
+    try:
+        celltalk_data = pd.read_csv('celltalk_data.csv')
+        filtered_celltalk = pipeline.filter_celltalk_data(celltalk_data)
+        filtered_celltalk.to_csv('filtered_celltalk_data.csv', index=False)
+    except FileNotFoundError:
+        logger.warning("CellTalkDB data file not found - skipping CellTalk filtration demo")
+    
+    # Simulate AnimalTFDB data filtering
+    try:
+        animaltf_data = pd.read_csv('animaltf_data.csv')
+        filtered_animaltf = pipeline.filter_animaltf_data(animaltf_data)
+        filtered_animaltf.to_csv('filtered_animaltf_data.csv', index=False)
+    except FileNotFoundError:
+        logger.warning("AnimalTFDB data file not found - skipping AnimalTF filtration demo")
+    
+    # Generate comprehensive filtering report
+    report = pipeline.generate_filtering_report()
+    
+    return pipeline, report
+
+if __name__ == "__main__":
+    pipeline, report = main()
