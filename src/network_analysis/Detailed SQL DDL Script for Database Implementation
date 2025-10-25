@@ -1,0 +1,397 @@
+-- =============================================
+-- Ovarian Cancer Network Analysis Database Schema
+-- Comprehensive implementation with keys, normalization, and indexing
+-- =============================================
+
+CREATE DATABASE IF NOT EXISTS ovarian_cancer_network;
+USE ovarian_cancer_network;
+
+-- =============================================
+-- Core Entity Tables (Normalized to 3NF)
+-- =============================================
+
+-- Primary gene reference table
+CREATE TABLE genes (
+    gene_id VARCHAR(20) PRIMARY KEY,
+    gene_symbol VARCHAR(50) NOT NULL,
+    ensembl_id VARCHAR(20),
+    entrez_id VARCHAR(15),
+    gene_name TEXT,
+    chromosome VARCHAR(10),
+    start_position INT,
+    end_position INT,
+    strand CHAR(1),
+    gene_type VARCHAR(50),
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    -- Indexes for frequent queries
+    INDEX idx_gene_symbol (gene_symbol),
+    INDEX idx_ensembl (ensembl_id),
+    INDEX idx_entrez (entrez_id),
+    INDEX idx_chromosome (chromosome)
+) ENGINE=InnoDB;
+
+-- Protein information table
+CREATE TABLE proteins (
+    uniprot_id VARCHAR(20) PRIMARY KEY,
+    protein_name TEXT NOT NULL,
+    gene_id VARCHAR(20) NOT NULL,
+    protein_length INT,
+    molecular_weight DECIMAL(10,2),
+    function_description TEXT,
+    
+    -- Foreign key constraint
+    FOREIGN KEY (gene_id) REFERENCES genes(gene_id) ON DELETE CASCADE,
+    
+    -- Indexes
+    INDEX idx_gene_id (gene_id)
+) ENGINE=InnoDB;
+
+-- =============================================
+-- Data Source Tables
+-- =============================================
+
+-- GDC TCGA-OV clinical and genomic data
+CREATE TABLE gdc_data (
+    gdc_id INT AUTO_INCREMENT PRIMARY KEY,
+    case_id VARCHAR(50) NOT NULL,
+    gene_id VARCHAR(20) NOT NULL,
+    sample_type VARCHAR(50),
+    vital_status VARCHAR(20),
+    days_to_death INT,
+    days_to_last_follow_up INT,
+    tumor_stage VARCHAR(20),
+    age_at_diagnosis INT,
+    expression_value DECIMAL(12,6),
+    mutation_type VARCHAR(50),
+    mutation_aa_change VARCHAR(100),
+    variant_type VARCHAR(50),
+    read_depth INT,
+    variant_allele_frequency DECIMAL(8,6),
+    
+    -- Foreign key constraint
+    FOREIGN KEY (gene_id) REFERENCES genes(gene_id) ON DELETE CASCADE,
+    
+    -- Unique constraint to prevent duplicates
+    UNIQUE KEY unique_case_gene (case_id, gene_id, mutation_type),
+    
+    -- Indexes for query performance
+    INDEX idx_case_id (case_id),
+    INDEX idx_gene_id (gene_id),
+    INDEX idx_mutation_type (mutation_type),
+    INDEX idx_expression (expression_value),
+    INDEX idx_vital_status (vital_status)
+) ENGINE=InnoDB;
+
+-- Pathway Commons interactions
+CREATE TABLE pathway_commons_interactions (
+    interaction_id INT AUTO_INCREMENT PRIMARY KEY,
+    participant_a VARCHAR(100) NOT NULL,
+    participant_b VARCHAR(100) NOT NULL,
+    interaction_type VARCHAR(50) NOT NULL,
+    interaction_data_source VARCHAR(100),
+    interaction_pubmed_id VARCHAR(20),
+    pathway_names TEXT,
+    pathway_ids TEXT,
+    mediator_ids TEXT,
+    confidence_score DECIMAL(5,4),
+    
+    -- Indexes for efficient querying
+    INDEX idx_participant_a (participant_a),
+    INDEX idx_participant_b (participant_b),
+    INDEX idx_interaction_type (interaction_type),
+    INDEX idx_pubmed_id (interaction_pubmed_id),
+    INDEX idx_data_source (interaction_data_source),
+    INDEX idx_confidence (confidence_score),
+    
+    -- Composite index for common queries
+    INDEX idx_participants_interaction (participant_a, participant_b, interaction_type)
+) ENGINE=InnoDB;
+
+-- AnimalTFDB transcription factors
+CREATE TABLE transcription_factors (
+    tf_id INT AUTO_INCREMENT PRIMARY KEY,
+    gene_id VARCHAR(20) NOT NULL,
+    tf_symbol VARCHAR(50) NOT NULL,
+    tf_family VARCHAR(100),
+    tf_superfamily VARCHAR(100),
+    dna_binding_domain VARCHAR(100),
+    target_genes TEXT,
+    regulatory_function TEXT,
+    species VARCHAR(50) DEFAULT 'Homo sapiens',
+    
+    -- Foreign key constraint
+    FOREIGN KEY (gene_id) REFERENCES genes(gene_id) ON DELETE CASCADE,
+    
+    -- Unique constraint
+    UNIQUE KEY unique_tf_gene (gene_id, tf_symbol),
+    
+    -- Indexes
+    INDEX idx_tf_symbol (tf_symbol),
+    INDEX idx_tf_family (tf_family),
+    INDEX idx_species (species),
+    INDEX idx_gene_id (gene_id)
+) ENGINE=InnoDB;
+
+-- CellTalkDB ligand-receptor interactions
+CREATE TABLE ligand_receptor_interactions (
+    lr_id INT AUTO_INCREMENT PRIMARY KEY,
+    ligand_gene_symbol VARCHAR(50) NOT NULL,
+    receptor_gene_symbol VARCHAR(50) NOT NULL,
+    ligand_gene_id VARCHAR(20),
+    receptor_gene_id VARCHAR(20),
+    ligand_ensembl_protein_id VARCHAR(20),
+    receptor_ensembl_protein_id VARCHAR(20),
+    interaction_type VARCHAR(50),
+    evidence VARCHAR(100),
+    confidence_score DECIMAL(5,4),
+    pathway_involvement TEXT,
+    species VARCHAR(50) DEFAULT 'Homo sapiens',
+    
+    -- Foreign key constraints
+    FOREIGN KEY (ligand_gene_id) REFERENCES genes(gene_id) ON DELETE SET NULL,
+    FOREIGN KEY (receptor_gene_id) REFERENCES genes(gene_id) ON DELETE SET NULL,
+    
+    -- Unique constraint
+    UNIQUE KEY unique_ligand_receptor (ligand_gene_symbol, receptor_gene_symbol, interaction_type),
+    
+    -- Indexes
+    INDEX idx_ligand (ligand_gene_symbol),
+    INDEX idx_receptor (receptor_gene_symbol),
+    INDEX idx_ligand_gene_id (ligand_gene_id),
+    INDEX idx_receptor_gene_id (receptor_gene_id),
+    INDEX idx_evidence (evidence),
+    INDEX idx_confidence (confidence_score)
+) ENGINE=InnoDB;
+
+-- =============================================
+-- Network Construction Tables
+-- =============================================
+
+-- Master network nodes table
+CREATE TABLE network_nodes (
+    node_id INT AUTO_INCREMENT PRIMARY KEY,
+    node_name VARCHAR(100) NOT NULL,
+    node_type ENUM('gene', 'protein', 'tf', 'complex', 'phenotype') NOT NULL,
+    gene_id VARCHAR(20),
+    uniprot_id VARCHAR(20),
+    degree_centrality DECIMAL(10,6),
+    betweenness_centrality DECIMAL(10,6),
+    clustering_coefficient DECIMAL(10,6),
+    pagerank_score DECIMAL(10,6),
+    
+    -- Foreign key constraints
+    FOREIGN KEY (gene_id) REFERENCES genes(gene_id) ON DELETE SET NULL,
+    FOREIGN KEY (uniprot_id) REFERENCES proteins(uniprot_id) ON DELETE SET NULL,
+    
+    -- Indexes
+    INDEX idx_node_name (node_name),
+    INDEX idx_node_type (node_type),
+    INDEX idx_gene_id (gene_id),
+    INDEX idx_degree (degree_centrality),
+    INDEX idx_betweenness (betweenness_centrality),
+    INDEX idx_pagerank (pagerank_score),
+    
+    -- Unique constraint
+    UNIQUE KEY unique_node_identifier (node_name, node_type)
+) ENGINE=InnoDB;
+
+-- Network edges with mutation-based weights
+CREATE TABLE network_edges (
+    edge_id INT AUTO_INCREMENT PRIMARY KEY,
+    source_node_id INT NOT NULL,
+    target_node_id INT NOT NULL,
+    interaction_type VARCHAR(50) NOT NULL,
+    data_source VARCHAR(100),
+    pubmed_id VARCHAR(20),
+    base_weight DECIMAL(8,6) DEFAULT 1.0,
+    mutation_weight DECIMAL(8,6),
+    confidence_score DECIMAL(5,4),
+    normalized_weight DECIMAL(8,6),
+    pathway_context TEXT,
+    
+    -- Foreign key constraints
+    FOREIGN KEY (source_node_id) REFERENCES network_nodes(node_id) ON DELETE CASCADE,
+    FOREIGN KEY (target_node_id) REFERENCES network_nodes(node_id) ON DELETE CASCADE,
+    
+    -- Unique constraint to prevent duplicate edges
+    UNIQUE KEY unique_edge (source_node_id, target_node_id, interaction_type),
+    
+    -- Indexes for graph traversal and analysis
+    INDEX idx_source (source_node_id),
+    INDEX idx_target (target_node_id),
+    INDEX idx_interaction_type (interaction_type),
+    INDEX idx_weight (normalized_weight),
+    INDEX idx_confidence (confidence_score),
+    INDEX idx_source_target (source_node_id, target_node_id)
+) ENGINE=InnoDB;
+
+-- =============================================
+-- Analysis Results Tables
+-- =============================================
+
+-- Random walk results
+CREATE TABLE random_walk_results (
+    analysis_id INT AUTO_INCREMENT PRIMARY KEY,
+    node_id INT NOT NULL,
+    walk_type ENUM('uniform', 'biased', 'temporal') NOT NULL,
+    visitation_frequency DECIMAL(12,9),
+    normalized_visits DECIMAL(12,9),
+    significance_score DECIMAL(10,6),
+    rank_position INT,
+    community_id INT,
+    analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Foreign key constraint
+    FOREIGN KEY (node_id) REFERENCES network_nodes(node_id) ON DELETE CASCADE,
+    
+    -- Indexes for result retrieval
+    INDEX idx_node_id (node_id),
+    INDEX idx_walk_type (walk_type),
+    INDEX idx_significance (significance_score),
+    INDEX idx_rank (rank_position),
+    INDEX idx_community (community_id),
+    INDEX idx_timestamp (analysis_timestamp)
+) ENGINE=InnoDB;
+
+-- Boolean modeling results
+CREATE TABLE boolean_modeling_results (
+    result_id INT AUTO_INCREMENT PRIMARY KEY,
+    node_id INT NOT NULL,
+    initial_state INT,
+    final_state INT,
+    activation_frequency DECIMAL(8,6),
+    is_pivotal BOOLEAN,
+    simulation_run INT,
+    stable_state_id INT,
+    
+    -- Foreign key constraint
+    FOREIGN KEY (node_id) REFERENCES network_nodes(node_id) ON DELETE CASCADE,
+    
+    -- Indexes
+    INDEX idx_node_id (node_id),
+    INDEX idx_pivotal (is_pivotal),
+    INDEX idx_activation_freq (activation_frequency),
+    INDEX idx_simulation_run (simulation_run),
+    INDEX idx_stable_state (stable_state_id)
+) ENGINE=InnoDB;
+
+-- =============================================
+-- Data Quality and Integrity Views
+-- =============================================
+
+-- View for data completeness analysis
+CREATE VIEW data_completeness AS
+SELECT 
+    'genes' as table_name,
+    COUNT(*) as total_records,
+    SUM(CASE WHEN gene_symbol IS NULL THEN 1 ELSE 0 END) as missing_symbols,
+    SUM(CASE WHEN ensembl_id IS NULL THEN 1 ELSE 0 END) as missing_ensembl
+FROM genes
+UNION ALL
+SELECT 
+    'gdc_data' as table_name,
+    COUNT(*) as total_records,
+    SUM(CASE WHEN expression_value IS NULL THEN 1 ELSE 0 END) as missing_expression,
+    SUM(CASE WHEN mutation_type IS NULL THEN 1 ELSE 0 END) as missing_mutations
+FROM gdc_data
+UNION ALL
+SELECT 
+    'pathway_commons' as table_name,
+    COUNT(*) as total_records,
+    SUM(CASE WHEN participant_a IS NULL OR participant_b IS NULL THEN 1 ELSE 0 END) as missing_participants,
+    SUM(CASE WHEN interaction_pubmed_id IS NULL THEN 1 ELSE 0 END) as missing_pubmed
+FROM pathway_commons_interactions;
+
+-- View for network statistics
+CREATE VIEW network_statistics AS
+SELECT 
+    COUNT(DISTINCT node_id) as total_nodes,
+    COUNT(DISTINCT edge_id) as total_edges,
+    AVG(degree_centrality) as avg_degree_centrality,
+    AVG(betweenness_centrality) as avg_betweenness,
+    AVG(clustering_coefficient) as avg_clustering,
+    AVG(normalized_weight) as avg_edge_weight
+FROM network_nodes nn
+JOIN network_edges ne ON nn.node_id IN (ne.source_node_id, ne.target_node_id);
+
+-- =============================================
+-- Stored Procedures for Data Maintenance
+-- =============================================
+
+DELIMITER //
+
+-- Procedure to update mutation-based edge weights
+CREATE PROCEDURE UpdateMutationWeights()
+BEGIN
+    UPDATE network_edges ne
+    JOIN network_nodes nns ON ne.source_node_id = nns.node_id
+    JOIN network_nodes nnt ON ne.target_node_id = nnt.node_id
+    JOIN gdc_data gd1 ON nns.gene_id = gd1.gene_id
+    JOIN gdc_data gd2 ON nnt.gene_id = gd2.gene_id
+    SET ne.mutation_weight = (
+        (COUNT(DISTINCT gd1.case_id) / (SELECT COUNT(DISTINCT case_id) FROM gdc_data)) *
+        (COUNT(DISTINCT gd2.case_id) / (SELECT COUNT(DISTINCT case_id) FROM gdc_data)) *
+        ne.confidence_score
+    );
+END//
+
+-- Procedure to normalize edge weights
+CREATE PROCEDURE NormalizeEdgeWeights()
+BEGIN
+    DECLARE max_weight DECIMAL(8,6);
+    
+    SELECT MAX(mutation_weight) INTO max_weight FROM network_edges;
+    
+    UPDATE network_edges 
+    SET normalized_weight = mutation_weight / max_weight
+    WHERE mutation_weight IS NOT NULL;
+END//
+
+-- Procedure to clean orphaned nodes
+CREATE PROCEDURE CleanOrphanedNodes()
+BEGIN
+    DELETE FROM network_nodes 
+    WHERE node_id NOT IN (
+        SELECT source_node_id FROM network_edges
+        UNION 
+        SELECT target_node_id FROM network_edges
+    );
+END//
+
+DELIMITER ;
+
+-- =============================================
+-- Example Data Insertion (for demonstration)
+-- =============================================
+
+/*
+-- Example: Insert a gene record
+INSERT INTO genes (gene_id, gene_symbol, ensembl_id, entrez_id, gene_name, gene_type)
+VALUES ('ENSG00000141510', 'TP53', 'ENSG00000141510', '7157', 'Tumor protein p53', 'protein_coding');
+
+-- Example: Insert GDC data
+INSERT INTO gdc_data (case_id, gene_id, expression_value, mutation_type, variant_allele_frequency)
+VALUES ('TCGA-XX-XXXX', 'ENSG00000141510', 12.456, 'Missense_Mutation', 0.45);
+
+-- Example: Insert pathway interaction
+INSERT INTO pathway_commons_interactions (participant_a, participant_b, interaction_type, interaction_data_source, confidence_score)
+VALUES ('TP53', 'MDM2', 'controls-phosphorylation', 'Pathway Commons', 0.85);
+*/
+
+-- =============================================
+-- Database Users and Permissions (Example)
+-- =============================================
+
+/*
+CREATE USER 'network_analysis'@'localhost' IDENTIFIED BY 'secure_password';
+GRANT SELECT, INSERT, UPDATE ON ovarian_cancer_network.* TO 'network_analysis'@'localhost';
+GRANT EXECUTE ON PROCEDURE ovarian_cancer_network.UpdateMutationWeights TO 'network_analysis'@'localhost';
+GRANT EXECUTE ON PROCEDURE ovarian_cancer_network.NormalizeEdgeWeights TO 'network_analysis'@'localhost';
+*/
+
+-- =============================================
+-- End of Database Schema
+-- =============================================
