@@ -1,0 +1,391 @@
+import networkx as nx
+import plotly.graph_objects as go
+import plotly.express as px
+import pandas as pd
+import numpy as np
+from plotly.offline import plot
+import json
+
+class P53NetworkVisualizer:
+    """
+    Interactive visualization of the p53 signaling network
+    Creates both static and interactive versions for publication
+    """
+    
+    def __init__(self):
+        self.G = nx.DiGraph()
+        self.node_colors = {
+            'mrna': '#FFA500',  # Orange
+            'post_translationally_modified': '#32CD32',  # Lime Green
+            'phenotypic_outcome': '#800080',  # Purple
+            'other': '#87CEEB'  # Sky Blue
+        }
+        self.node_categories = {}
+        
+    def create_p53_network(self):
+        """
+        Create the p53 signaling network based on thesis description
+        This replicates the network structure shown in Figure 4.10
+        """
+        # Define nodes with their categories
+        nodes = [
+            # mRNAs (Orange)
+            ('p53 mRNA', 'mrna'),
+            ('Mdm2 mRNA', 'mrna'), 
+            ('ATM mRNA', 'mrna'),
+            ('Wip1 mRNA', 'mrna'),
+            ('Chk2 mRNA', 'mrna'),
+            ('Bax mRNA', 'mrna'),
+            ('p21 mRNA', 'mrna'),
+            ('PTEN mRNA', 'mrna'),
+            ('A20 mRNA', 'mrna'),
+            ('IkBa mRNA', 'mrna'),
+            
+            # Post-translationally modified proteins (Lime Green)
+            ('p53-p', 'post_translationally_modified'),
+            ('Mdm2-p cyt', 'post_translationally_modified'),
+            ('Mdm2-p nuc', 'post_translationally_modified'), 
+            ('ATM-p', 'post_translationally_modified'),
+            ('ATMa-p', 'post_translationally_modified'),
+            ('MRN-p', 'post_translationally_modified'),
+            ('Chk2-p', 'post_translationally_modified'),
+            ('KSRP-p', 'post_translationally_modified'),
+            ('AKT-p', 'post_translationally_modified'),
+            
+            # Phenotypic outcomes (Purple)
+            ('apoptosis', 'phenotypic_outcome'),
+            ('cell cycle arrest', 'phenotypic_outcome'),
+            
+            # Other components (Sky Blue)
+            ('p53', 'other'),
+            ('Mdm2 cyt', 'other'),
+            ('ATM', 'other'), 
+            ('DSB', 'other'),
+            ('Wip1', 'other'),
+            ('Chk2', 'other'),
+            ('Bax', 'other'),
+            ('p21', 'other'),
+            ('PTEN', 'other'),
+            ('PIP2', 'other'),
+            ('PIP3', 'other'),
+            ('IR', 'other'),
+            ('TNFa', 'other'),
+            ('TNFR1', 'other'),
+            ('IKKKa', 'other'),
+            ('IKKa', 'other'),
+            ('A20 cyt', 'other'),
+            ('NFkB', 'other'),
+            ('IkBa', 'other'),
+            ('IKKb', 'other'),
+            ('pre-miR-16', 'other'),
+            ('miR-16', 'other'),
+            ('CREB', 'other')
+        ]
+        
+        # Add nodes to graph
+        for node, category in nodes:
+            self.G.add_node(node, category=category)
+            self.node_categories[node] = category
+        
+        # Define edges (regulatory interactions)
+        edges = [
+            # DNA damage response pathway
+            ('IR', 'DSB'), ('DSB', 'ATM-p'), ('ATM-p', 'p53-p'),
+            ('ATM-p', 'Chk2-p'), ('Chk2-p', 'p53-p'),
+            ('MRN-p', 'ATM-p'),
+            
+            # p53-MDM2 feedback loop
+            ('p53-p', 'Mdm2 mRNA'), ('Mdm2 mRNA', 'Mdm2 cyt'),
+            ('Mdm2 cyt', 'Mdm2-p cyt'), ('Mdm2-p cyt', 'Mdm2-p nuc'),
+            ('Mdm2-p nuc', 'p53-p'),
+            
+            # p53 downstream targets
+            ('p53-p', 'p21 mRNA'), ('p21 mRNA', 'p21'),
+            ('p21', 'cell cycle arrest'),
+            ('p53-p', 'Bax mRNA'), ('Bax mRNA', 'Bax'),
+            ('Bax', 'apoptosis'),
+            
+            # AKT signaling
+            ('PIP3', 'AKT-p'), ('AKT-p', 'Mdm2-p cyt'),
+            ('PTEN', 'PIP2'), ('PIP2', 'PIP3'),
+            
+            # NF-kB pathway
+            ('TNFa', 'TNFR1'), ('TNFR1', 'IKKKa'),
+            ('IKKKa', 'IKKa'), ('IKKa', 'NFkB'),
+            ('NFkB', 'A20 mRNA'), ('A20 mRNA', 'A20 cyt'),
+            ('A20 cyt', 'IKKKa'),
+            ('NFkB', 'IkBa mRNA'), ('IkBa mRNA', 'IkBa'),
+            ('IkBa', 'NFkB'),
+            
+            # miRNA regulation
+            ('pre-miR-16', 'miR-16'), ('KSRP-p', 'pre-miR-16'),
+            
+            # Additional interactions
+            ('ATM-p', 'ATMa-p'), ('ATMa-p', 'CREB'),
+            ('Wip1', 'ATM-p'), ('Wip1 mRNA', 'Wip1'),
+            ('p53-p', 'Wip1 mRNA'), ('p53-p', 'PTEN mRNA'),
+            ('PTEN mRNA', 'PTEN')
+        ]
+        
+        # Add edges to graph
+        self.G.add_edges_from(edges)
+        
+        return self.G
+    
+    def create_interactive_visualization(self, output_file='p53_network_interactive.html'):
+        """
+        Create interactive Plotly visualization with hover information
+        """
+        # Get node positions using spring layout
+        pos = nx.spring_layout(self.G, k=1, iterations=50)
+        
+        # Extract x, y coordinates
+        x_nodes = [pos[node][0] for node in self.G.nodes()]
+        y_nodes = [pos[node][1] for node in self.G.nodes()]
+        
+        # Create node trace
+        node_trace = go.Scatter(
+            x=x_nodes, y=y_nodes,
+            mode='markers+text',
+            hoverinfo='text',
+            text=[str(node) for node in self.G.nodes()],
+            textposition="middle center",
+            marker=dict(
+                size=20,
+                color=[self.node_colors[self.node_categories[node]] for node in self.G.nodes()],
+                line=dict(width=2, color='darkgray')
+            ),
+            name='Nodes'
+        )
+        
+        # Create edge traces
+        edge_traces = []
+        for edge in self.G.edges():
+            x0, y0 = pos[edge[0]]
+            x1, y1 = pos[edge[1]]
+            
+            edge_trace = go.Scatter(
+                x=[x0, x1, None], y=[y0, y1, None],
+                line=dict(width=2, color='gray'),
+                hoverinfo='none',
+                mode='lines',
+                showlegend=False
+            )
+            edge_traces.append(edge_trace)
+        
+        # Create figure
+        fig = go.Figure()
+        
+        # Add edge traces
+        for trace in edge_traces:
+            fig.add_trace(trace)
+        
+        # Add node trace
+        fig.add_trace(node_trace)
+        
+        # Update layout
+        fig.update_layout(
+            title='Interactive p53 Signaling Network<br>'
+                  '<sub>Node colors: Orange=mRNAs, Lime Green=Post-translationally modified, '
+                  'Purple=Phenotypic outcomes, Sky Blue=Other components</sub>',
+            title_x=0.5,
+            showlegend=False,
+            hovermode='closest',
+            margin=dict(b=20,l=5,r=5,t=40),
+            annotations=[ dict(
+                text="Click and drag to navigate • Scroll to zoom • Hover for details",
+                showarrow=False,
+                xref="paper", yref="paper",
+                x=0.005, y=-0.002,
+                xanchor='left', yanchor='bottom',
+                font=dict(size=10, color='gray')
+            )],
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            plot_bgcolor='white',
+            width=1000,
+            height=800
+        )
+        
+        # Add custom hover information
+        node_adjacencies = []
+        node_text = []
+        for node in self.G.nodes():
+            # Get neighbors
+            neighbors = list(self.G.neighbors(node))
+            node_text.append(
+                f'<b>{node}</b><br>'
+                f'Category: {self.node_categories[node].replace("_", " ").title()}<br>'
+                f'Degree: {self.G.degree[node]}<br>'
+                f'Outgoing: {len(list(self.G.successors(node)))}<br>'
+                f'Incoming: {len(list(self.G.predecessors(node)))}<br>'
+                f'Neighbors: {", ".join(neighbors) if neighbors else "None"}'
+            )
+        
+        node_trace.hovertext = node_text
+        
+        # Save interactive plot
+        plot(fig, filename=output_file, auto_open=False)
+        print(f"Interactive visualization saved as: {output_file}")
+        
+        return fig
+    
+    def create_static_visualization(self, output_file='p53_network_static.png'):
+        """
+        Create static matplotlib visualization for publication
+        """
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
+        
+        plt.figure(figsize=(16, 12))
+        
+        # Use spring layout for node positions
+        pos = nx.spring_layout(self.G, k=1, iterations=50)
+        
+        # Draw edges
+        nx.draw_networkx_edges(self.G, pos, alpha=0.6, edge_color='gray', 
+                              arrows=True, arrowsize=20, arrowstyle='->')
+        
+        # Draw nodes with different colors for each category
+        for category, color in self.node_colors.items():
+            category_nodes = [node for node in self.G.nodes() 
+                            if self.node_categories[node] == category]
+            nx.draw_networkx_nodes(self.G, pos, nodelist=category_nodes,
+                                 node_color=color, node_size=800, alpha=0.9)
+        
+        # Draw labels
+        nx.draw_networkx_labels(self.G, pos, font_size=8, font_family='sans-serif')
+        
+        # Create legend
+        legend_patches = [
+            mpatches.Patch(color=color, label=category.replace('_', ' ').title())
+            for category, color in self.node_colors.items()
+        ]
+        plt.legend(handles=legend_patches, loc='upper left', bbox_to_anchor=(1, 1))
+        
+        plt.title('p53 Signaling Network\nMolecular Interaction Map', fontsize=16, pad=20)
+        plt.axis('off')
+        plt.tight_layout()
+        
+        # Save static plot
+        plt.savefig(output_file, dpi=300, bbox_inches='tight', 
+                   facecolor='white', edgecolor='none')
+        print(f"Static visualization saved as: {output_file}")
+        
+        plt.show()
+    
+    def export_network_data(self, output_file='p53_network_data.json'):
+        """
+        Export network data for use in other visualization tools (e.g., Cytoscape)
+        """
+        network_data = {
+            'nodes': [],
+            'edges': [],
+            'metadata': {
+                'description': 'p53 signaling network from ovarian cancer analysis',
+                'node_categories': self.node_categories,
+                'node_colors': self.node_colors,
+                'total_nodes': len(self.G.nodes()),
+                'total_edges': len(self.G.edges())
+            }
+        }
+        
+        # Add nodes
+        for node in self.G.nodes():
+            network_data['nodes'].append({
+                'id': node,
+                'category': self.node_categories[node],
+                'color': self.node_colors[self.node_categories[node]],
+                'degree': self.G.degree[node]
+            })
+        
+        # Add edges
+        for source, target in self.G.edges():
+            network_data['edges'].append({
+                'source': source,
+                'target': target,
+                'interaction': 'regulatory'
+            })
+        
+        # Save to JSON
+        with open(output_file, 'w') as f:
+            json.dump(network_data, f, indent=2)
+        
+        print(f"Network data exported as: {output_file}")
+        return network_data
+    
+    def generate_network_statistics(self):
+        """
+        Generate comprehensive network statistics
+        """
+        stats = {
+            'total_nodes': len(self.G.nodes()),
+            'total_edges': len(self.G.edges()),
+            'network_density': nx.density(self.G),
+            'is_directed': nx.is_directed(self.G),
+            'is_connected': nx.is_weakly_connected(self.G),
+            'node_categories': {},
+            'centrality_measures': {}
+        }
+        
+        # Count nodes by category
+        for category in set(self.node_categories.values()):
+            count = sum(1 for node_cat in self.node_categories.values() if node_cat == category)
+            stats['node_categories'][category] = count
+        
+        # Calculate centrality measures for top nodes
+        degree_centrality = nx.degree_centrality(self.G)
+        betweenness_centrality = nx.betweenness_centrality(self.G)
+        
+        stats['centrality_measures']['top_degree'] = sorted(
+            degree_centrality.items(), key=lambda x: x[1], reverse=True)[:5]
+        stats['centrality_measures']['top_betweenness'] = sorted(
+            betweenness_centrality.items(), key=lambda x: x[1], reverse=True)[:5]
+        
+        return stats
+
+def main():
+    """
+    Main function to generate both static and interactive visualizations
+    """
+    print("Generating p53 Signaling Network Visualizations...")
+    
+    # Initialize visualizer
+    visualizer = P53NetworkVisualizer()
+    
+    # Create the network
+    G = visualizer.create_p53_network()
+    print(f"Network created with {len(G.nodes())} nodes and {len(G.edges())} edges")
+    
+    # Generate network statistics
+    stats = visualizer.generate_network_statistics()
+    print("\nNetwork Statistics:")
+    print(f"- Total nodes: {stats['total_nodes']}")
+    print(f"- Total edges: {stats['total_edges']}")
+    print(f"- Network density: {stats['network_density']:.3f}")
+    print("\nNode categories:")
+    for category, count in stats['node_categories'].items():
+        print(f"  {category}: {count}")
+    
+    # Create visualizations
+    print("\nCreating visualizations...")
+    
+    # Interactive HTML visualization
+    interactive_fig = visualizer.create_interactive_visualization('p53_network_interactive.html')
+    
+    # Static PNG visualization
+    visualizer.create_static_visualization('p53_network_static.png')
+    
+    # Export network data
+    network_data = visualizer.export_network_data('p53_network_data.json')
+    
+    print("\nVisualization generation complete!")
+    print("Files created:")
+    print("- p53_network_interactive.html (Interactive Plotly visualization)")
+    print("- p53_network_static.png (Static publication-ready figure)")
+    print("- p53_network_data.json (Network data for external tools)")
+    
+    return visualizer
+
+if __name__ == "__main__":
+    visualizer = main()
