@@ -1,0 +1,350 @@
+import numpy as np
+import networkx as nx
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
+
+
+def extract_comprehensive_features(G):
+    """Extract comprehensive node features for network analysis"""
+    features = []
+    feature_names = []
+
+    # Centrality measures
+    degree_centrality = nx.degree_centrality(G)
+    betweenness_centrality = nx.betweenness_centrality(G)
+    closeness_centrality = nx.closeness_centrality(G)
+    pagerank = nx.pagerank(G)
+
+    try:
+        eigenvector_centrality = nx.eigenvector_centrality(G, max_iter=1000)
+    except:
+        eigenvector_centrality = {node: 0 for node in G.nodes()}
+
+    # Additional topological features
+    clustering_coeff = nx.clustering(G)
+    in_degrees = dict(G.in_degree())
+    out_degrees = dict(G.out_degree())
+
+    for node in G.nodes():
+        # Biological context features
+        is_kinase = any(keyword in node for keyword in ['K', 'RAF', 'MEK', 'ERK', 'AKT'])
+        is_transcription_factor = any(keyword in node for keyword in ['FOS', 'JUN', 'MYC', 'CREB', 'ELK'])
+        is_receptor = any(keyword in node for keyword in ['R', 'EGFR', 'HER', 'IGF', 'PDGF'])
+        is_cyclin = 'Cyclin' in node
+        is_cdk = 'CDK' in node
+        is_tumor_suppressor = node in ['p53', 'Rb', 'PTEN', 'p21']
+
+        node_features = [
+            # Topological features
+            degree_centrality[node],
+            betweenness_centrality[node],
+            closeness_centrality[node],
+            pagerank[node],
+            clustering_coeff[node],
+            eigenvector_centrality.get(node, 0),
+            in_degrees[node],
+            out_degrees[node],
+
+            # Biological context features
+            float(is_kinase),
+            float(is_transcription_factor),
+            float(is_receptor),
+            float(is_cyclin),
+            float(is_cdk),
+            float(is_tumor_suppressor),
+
+            # Network position features
+            len(list(nx.all_neighbors(G, node))),
+            G.in_degree(node) / max(1, G.out_degree(node)),  # In/out degree ratio
+        ]
+        features.append(node_features)
+
+    # Create feature names
+    feature_names = [
+        'degree_centrality', 'betweenness_centrality', 'closeness_centrality',
+        'pagerank', 'clustering_coeff', 'eigenvector_centrality',
+        'in_degree', 'out_degree', 'is_kinase', 'is_transcription_factor',
+        'is_receptor', 'is_cyclin', 'is_cdk', 'is_tumor_suppressor',
+        'neighbor_count', 'in_out_ratio'
+    ]
+
+    return np.array(features), feature_names
+
+
+def calculate_node_importance(G, features):
+    """Calculate node importance using network features and Random Forest"""
+
+    # Create target variable (combination of centrality measures)
+    degree_centrality = nx.degree_centrality(G)
+    betweenness_centrality = nx.betweenness_centrality(G)
+
+    # Combined importance score
+    y = np.array([degree_centrality[node] + betweenness_centrality[node]
+                  for node in G.nodes()])
+
+    # Normalize features
+    scaler = StandardScaler()
+    X_normalized = scaler.fit_transform(features)
+
+    # Use Random Forest to predict importance
+    rf = RandomForestRegressor(n_estimators=100, random_state=42)
+    rf.fit(X_normalized, y)
+
+    # Get feature importances from the model
+    node_importance = rf.predict(X_normalized)
+
+    return node_importance, rf.feature_importances_
+
+
+def traditional_key_node_identification(G, network_name):
+    """Perform traditional ML analysis to identify key nodes"""
+    print(f"\n=== Traditional Key Node Identification for {network_name} ===")
+
+    # Extract comprehensive features
+    features, feature_names = extract_comprehensive_features(G)
+
+    # Calculate node importance
+    node_importance, feature_importances = calculate_node_importance(G, features)
+
+    # Rank nodes by importance
+    node_list = list(G.nodes())
+    ranked_nodes = sorted(zip(node_list, node_importance),
+                          key=lambda x: x[1], reverse=True)
+
+    print("Top 15 Key Nodes identified by Traditional ML:")
+    for i, (node, score) in enumerate(ranked_nodes[:15]):
+        print(f"{i + 1:2d}. {node:20s}: {score:.4f}")
+
+    # Identify hubs (nodes with high degree and high importance score)
+    degree_centrality = nx.degree_centrality(G)
+    hubs = []
+    for node, importance_score in ranked_nodes[:20]:
+        degree_score = degree_centrality[node]
+        hub_score = importance_score * degree_score
+        hubs.append((node, hub_score, importance_score, degree_score))
+
+    hubs_sorted = sorted(hubs, key=lambda x: x[1], reverse=True)
+
+    print(f"\nTop 10 Network Hubs (Importance × Degree):")
+    for i, (node, hub_score, importance_score, deg_score) in enumerate(hubs_sorted[:10]):
+        print(
+            f"{i + 1:2d}. {node:20s}: Hub Score: {hub_score:.4f} (Importance: {importance_score:.4f}, Degree: {deg_score:.4f})")
+
+    # Print feature importances
+    print(f"\nTop 5 Most Important Features:")
+    feature_imp_sorted = sorted(zip(feature_names, feature_importances),
+                                key=lambda x: x[1], reverse=True)
+    for feat, imp in feature_imp_sorted[:5]:
+        print(f"  {feat:25s}: {imp:.4f}")
+
+    return ranked_nodes, hubs_sorted, feature_imp_sorted
+
+
+def create_cell_cycle_network():
+    """Create Cell Cycle network from your provided nodes and edges"""
+    G = nx.DiGraph()
+
+    # Add nodes from your code
+    cell_cycle_nodes = [
+        # Cyclins & CDKs
+        'Cyclin D1', 'Cyclin D2', 'Cyclin D3', 'Cyclin E1', 'Cyclin E2',
+        'Cyclin A1', 'Cyclin A2', 'Cyclin B1', 'Cyclin B2', 'Cyclin B3',
+        'CDK1', 'CDK2', 'CDK4', 'CDK6',
+        # CDK Inhibitors
+        'p21', 'p27', 'p57', 'p16', 'p15', 'p18', 'p19',
+        # Rb-E2F Pathway
+        'Rb', 'Rb-p', 'E2F1', 'E2F2', 'E2F3', 'E2F4', 'E2F5', 'DP1', 'DP2',
+        # DNA Damage Response
+        'ATM', 'ATR', 'Chk1', 'Chk2', 'p53', 'Mdm2', 'Wip1', '14-3-3',
+        'CDC25A', 'CDC25B', 'CDC25C',
+        # Checkpoints
+        'BubR1', 'Bub1', 'Bub3', 'Mad1', 'Mad2', 'Aurora A', 'Aurora B',
+        'PLK1', 'WEE1', 'MYT1',
+        # Ubiquitin Ligases
+        'APC/C', 'CDC20', 'CDH1', 'SCF', 'SKP2', 'CUL1', 'FBXW7',
+        # Transcription Factors
+        'MYC', 'FOXM1', 'HIF1A', 'NF-kB', 'STAT3', 'YAP1', 'NOTCH1',
+        # Phenotypes
+        'G1_phase', 'S_phase', 'G2_phase', 'M_phase',
+        'cell_cycle_arrest', 'senescence', 'apoptosis'
+    ]
+
+    G.add_nodes_from(cell_cycle_nodes)
+
+    # Add edges from your provided list
+    cell_cycle_edges = [
+        # Cyclin-CDK Complexes
+        ('Cyclin D1', 'CDK4'), ('Cyclin D1', 'CDK6'),
+        ('Cyclin E1', 'CDK2'), ('Cyclin A1', 'CDK2'),
+        ('Cyclin B1', 'CDK1'),
+
+        # Rb-E2F Regulation
+        ('CDK4', 'Rb'), ('CDK6', 'Rb'), ('Cyclin E1', 'CDK2'), ('CDK2', 'Rb'),
+        ('Rb', 'E2F1'), ('E2F1', 'Cyclin E1'), ('E2F1', 'Cyclin A1'),
+
+        # CDK Inhibitors
+        ('p21', 'CDK2'), ('p21', 'CDK4'), ('p27', 'CDK4'),
+        ('p16', 'CDK4'), ('p53', 'p21'),
+
+        # DNA Damage Response
+        ('ATM', 'Chk2'), ('ATR', 'Chk1'), ('Chk1', 'CDC25A'),
+        ('Chk2', 'CDC25C'), ('Chk1', 'p53'), ('p53', 'Mdm2'),
+        ('Mdm2', 'p53'), ('Wip1', 'ATM'),
+
+        # Checkpoints
+        ('BubR1', 'APC/C'), ('Mad2', 'CDC20'), ('Aurora B', 'BubR1'),
+        ('PLK1', 'CDC25C'),
+
+        # Cross-Talk
+        ('MYC', 'Cyclin D1'), ('NF-kB', 'Cyclin D1'), ('STAT3', 'Cyclin D1'),
+        ('YAP1', 'Cyclin E1'), ('NOTCH1', 'Cyclin D1'), ('HIF1A', 'Cyclin D1'),
+
+        # Phenotypic Outcomes
+        ('CDK1', 'M_phase'), ('CDK4', 'G1_phase'),
+        ('p21', 'cell_cycle_arrest'), ('p53', 'apoptosis')
+    ]
+
+    # Add edges with biological relevance weights
+    for u, v in cell_cycle_edges:
+        # Assign weights based on biological importance
+        if 'p53' in u or 'p53' in v:
+            weight = 2.0  # High importance for p53 pathway
+        elif 'Cyclin' in u or 'CDK' in u:
+            weight = 1.5  # Medium-high for cell cycle engines
+        else:
+            weight = 1.0
+        G.add_edge(u, v, weight=weight, interaction='regulation')
+
+    return G
+
+
+def create_mapk_network():
+    """Create MAPK network from your provided nodes and edges"""
+    G = nx.DiGraph()
+
+    # Add nodes from your code
+    mapk_nodes = [
+        # Growth Factor Receptors
+        'EGFR', 'HER2', 'HER3', 'HER4', 'IGF1R', 'INSR',
+        'PDGFR', 'FGFR', 'MET', 'NTRK',
+        # RAS-RAF-MEK-ERK Pathway
+        'GRB2', 'SOS1', 'RAS', 'HRAS', 'KRAS', 'NRAS',
+        'RAF1', 'BRAF', 'MEK1', 'MEK2', 'ERK1', 'ERK2',
+        # PI3K-AKT-mTOR Pathway
+        'PI3K', 'PIK3CA', 'PIK3CB', 'PIK3CD', 'PTEN',
+        'PIP2', 'PIP3', 'AKT1', 'AKT2', 'AKT3',
+        'PDK1', 'mTORC1', 'mTORC2',
+        # Downstream Effectors
+        'RSK1', 'RSK2', 'RSK3', 'MSK1', 'MSK2',
+        'MNK1', 'MNK2', 'ELK1', 'CREB', 'c-FOS', 'c-JUN', 'MYC',
+        # Negative Regulators
+        'DUSP1', 'DUSP6', 'SPRY2', 'SPRY4', 'PP2A', 'PTPN11', 'NF1',
+        # Cross-Talk Nodes
+        'GSK3B', 'FOXO1', 'FOXO3', 'BAD', 'BCL2',
+        'BCLXL', 'p70S6K', '4E-BP1', 'eIF4E', 'HIF1A',
+        # Phenotypes
+        'cell_proliferation', 'cell_survival', 'migration', 'invasion', 'angiogenesis'
+    ]
+
+    G.add_nodes_from(mapk_nodes)
+
+    # Add edges from your provided list
+    mapk_edges = [
+        # EGFR-RAS-ERK Pathway
+        ('EGFR', 'GRB2'), ('GRB2', 'SOS1'), ('SOS1', 'RAS'),
+        ('RAS', 'RAF1'), ('RAF1', 'MEK1'), ('MEK1', 'ERK1'),
+        ('ERK1', 'RSK1'), ('ERK1', 'c-FOS'), ('ERK1', 'MYC'),
+
+        # PI3K-AKT Pathway
+        ('EGFR', 'PI3K'), ('PI3K', 'PIP3'), ('PIP3', 'AKT1'),
+        ('PDK1', 'AKT1'), ('AKT1', 'mTORC1'), ('mTORC1', 'p70S6K'),
+        ('mTORC1', '4E-BP1'), ('AKT1', 'GSK3B'), ('AKT1', 'FOXO1'),
+
+        # Negative Feedback
+        ('DUSP1', 'ERK1'), ('SPRY2', 'GRB2'), ('PP2A', 'AKT1'),
+        ('PTEN', 'PIP3'),
+
+        # Cross-Talk
+        ('ERK1', 'AR'), ('AKT1', 'AR'), ('ERK1', 'ESR1'), ('AKT1', 'ESR1'),
+        ('ERK1', 'HIF1A'), ('mTORC1', 'HIF1A'),
+
+        # Phenotypic Outcomes
+        ('MYC', 'cell_proliferation'), ('AKT1', 'cell_survival'),
+        ('ERK1', 'migration'), ('HIF1A', 'angiogenesis')
+    ]
+
+    # Add edges with biological relevance weights
+    for u, v in mapk_edges:
+        # Assign weights based on pathway position and importance
+        if u in ['EGFR', 'RAS', 'ERK1', 'AKT1']:
+            weight = 2.0  # High importance for key signaling nodes
+        elif 'MEK' in u or 'RAF' in u:
+            weight = 1.5  # Medium-high for cascade components
+        else:
+            weight = 1.0
+        G.add_edge(u, v, weight=weight, interaction='signaling')
+
+    return G
+
+
+# Apply traditional ML to both networks
+print("Applying Traditional ML to identify key nodes and hubs...")
+
+# Cell Cycle Network Analysis
+G_cell_cycle = create_cell_cycle_network()
+cell_cycle_ranked, cell_cycle_hubs, cell_cycle_features = traditional_key_node_identification(G_cell_cycle,
+                                                                                              "Cell Cycle Network")
+
+# MAPK Network Analysis
+G_mapk = create_mapk_network()
+mapk_ranked, mapk_hubs, mapk_features = traditional_key_node_identification(G_mapk, "MAPK Signaling Network")
+
+# Extract top nodes for reporting
+cell_cycle_top_nodes = cell_cycle_ranked[:8]
+mapk_top_nodes = mapk_ranked[:8]
+
+cell_cycle_top_hubs = cell_cycle_hubs[:6]
+mapk_top_hubs = mapk_hubs[:6]
+
+print(f"\n=== FINAL RESULTS ===")
+print(f"Cell Cycle Top Nodes: {[node for node, score in cell_cycle_top_nodes]}")
+print(f"MAPK Top Nodes: {[node for node, score in mapk_top_nodes]}")
+print(f"Cell Cycle Top Hubs: {[node for node, _, _, _ in cell_cycle_top_hubs]}")
+print(f"MAPK Top Hubs: {[node for node, _, _, _ in mapk_top_hubs]}")
+
+# Create visualization
+plt.figure(figsize=(15, 10))
+
+# Plot cell cycle network
+plt.subplot(2, 2, 1)
+pos = nx.spring_layout(G_cell_cycle, k=1, iterations=50)
+node_sizes = [cell_cycle_ranked[i][1] * 1000 for i in range(len(G_cell_cycle))]
+nx.draw(G_cell_cycle, pos, node_size=node_sizes, node_color='lightblue',
+        with_labels=True, font_size=8, alpha=0.7, arrows=True)
+plt.title("Cell Cycle Network with Node Importance")
+
+# Plot MAPK network
+plt.subplot(2, 2, 2)
+pos = nx.spring_layout(G_mapk, k=1, iterations=50)
+node_sizes = [mapk_ranked[i][1] * 1000 for i in range(len(G_mapk))]
+nx.draw(G_mapk, pos, node_size=node_sizes, node_color='lightcoral',
+        with_labels=True, font_size=8, alpha=0.7, arrows=True)
+plt.title("MAPK Network with Node Importance")
+
+# Plot feature importances
+plt.subplot(2, 2, 3)
+cell_cycle_feat_names, cell_cycle_feat_imp = zip(*cell_cycle_features[:8])
+plt.barh(cell_cycle_feat_names, cell_cycle_feat_imp)
+plt.title("Cell Cycle Network - Feature Importances")
+plt.xlabel("Importance")
+
+plt.subplot(2, 2, 4)
+mapk_feat_names, mapk_feat_imp = zip(*mapk_features[:8])
+plt.barh(mapk_feat_names, mapk_feat_imp)
+plt.title("MAPK Network - Feature Importances")
+plt.xlabel("Importance")
+
+plt.tight_layout()
+plt.show()
