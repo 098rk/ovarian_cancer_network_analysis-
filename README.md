@@ -1,14 +1,18 @@
 # Ovarian Cancer Network Analysis Pipeline
 
-A comprehensive computational framework for identifying key regulatory nodes in biological signaling networks through integrated multi-omics data analysis and network modeling. This reproducible pipeline implements the methodology developed in the PhD thesis "Development of Methods for Identifying Key Variables in Complex Mathematical Models of Biological Systems."
+A comprehensive computational framework for identifying key regulatory nodes in biological signaling networks through integrated multi-omics data analysis and network modeling. This reproducible pipeline implements the methodology developed in the PhD thesis *"Development of Methods for Identifying Key Variables in Complex Mathematical Models of Biological Systems."*
+
+**Reproducibility Note:**  
+Once the filtered network is generated, reproducing the complete set of analyses — including network construction, filtering, topological analysis, Boolean simulations, and random walk experiments — typically requires **approximately 6 to 8 hours** on a standard desktop computer.
 
 ## Research Hypotheses
 
-- **H1**: Integrated computational pipeline combining Boolean modeling, PageRank, and random walk algorithms consistently identifies key regulatory nodes (NF-κB, p53, ATM) with >80% convergence across methods
-- **H2**: Multi-omics data integration uncovers regulatory elements (IKKα, Wip1) with high centrality scores representing novel therapeutic targets  
-- **H3**: Methodology demonstrates ≥85% robustness and generalizability across Cell Cycle and MAPK signaling pathways
+- **H1:** Integrated computational pipeline combining Boolean modeling, PageRank, and random walk algorithms consistently identifies key regulatory nodes (NF-κB, p53, ATM) with >80% convergence across methods  
+- **H2:** Multi-omics data integration uncovers regulatory elements (IKKα, Wip1) with high centrality scores representing novel therapeutic targets  
+- **H3:** Methodology demonstrates ≥85% robustness and generalizability across Cell Cycle and MAPK signaling pathways
 
 ## Quick Start
+
 
 ### Installation
 
