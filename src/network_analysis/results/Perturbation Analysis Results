@@ -1,0 +1,9 @@
+# Node Knockout Simulations
+Critical Nodes (network fragmentation):
+- p53-p knockout: 65% network disruption
+- ATMa-p knockout: 42% network disruption  
+- NF-κB knockout: 38% network disruption
+
+Resilient Nodes (minimal impact):
+- Terminal phenotypes (apoptosis, cell cycle arrest)
+- External inputs (IR)
