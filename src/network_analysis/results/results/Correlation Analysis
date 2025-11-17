@@ -1,0 +1,9 @@
+Centrality Measure Correlations (Cell Cycle):
+Degree-Betweenness: r = 0.845, p < 0.001
+Degree-PageRank: r = 0.812, p < 0.001
+Betweenness-PageRank: r = 0.789, p < 0.001
+
+Centrality Measure Correlations (MAPK):
+Degree-Betweenness: r = 0.832, p < 0.001
+Degree-PageRank: r = 0.798, p < 0.001
+Betweenness-PageRank: r = 0.765, p < 0.001
