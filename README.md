@@ -1,288 +1,101 @@
-Quick Reproduction (4-8 hours on standard PC)
+Ovarian Cancer Network Analysis Pipeline – Overview for Reproducibility
 
-For quick reproduction of the results, follow these steps:
-# 1. Upload repository using command:
+This repository provides a fully reproducible computational pipeline for identifying key regulatory nodes in ovarian cancer signaling networks using integrated multi-omics data.
+
+It implements the methodology developed in the PhD thesis:
+
+“Development of Methods for Identifying Key Variables in Complex Mathematical Models of Biological Systems” (Khan, 2025).
+
+The pipeline integrates Boolean modeling, PageRank centrality, Random Walk analysis, and RCNNs to systematically uncover master regulators and potential therapeutic targets.
+
+
+Quick Reproduction
+
+For quick reproduction of results (≈4–8 hours on a standard PC), follow these steps:
+
+1. Clone the repository:
 git clone https://github.com/098rk/ovarian_cancer_network_analysis-.git
-cd ovarian_cancer_network_analysis-
+2. cd ovarian_cancer_network_analysis-
+3. Data Extraction: Use the pathwaycommon.py, animaltf.py,celltalk.py,tcga.py for data extraction
+4. Set up the MySQL database:
+python src/network_analysis/database_setup.py and add the dowlloaded data
+5. Import prefiltered data from MYSQL database (to filter): Filtra data using filter data file
+6. Navigate to analysis directory: cd src/network_analysis
+7.Run the quick reproduction script: python reproduction_pipeline.py
+8.Results location: results/  # Contains all output files including Boolean simulations, centrality, Random Walk results
 
-# 2. Run the command to setup SQL:
-python src/network_analysis/database_setup.py
 
-# 3. Import the filtered database which includes curated data from the thesis
-# (This is automatically handled by the setup script)
+Overview of Pipeline
 
-# 4. Go to the network analysis directory:
-cd src/network_analysis
+The pipeline consists of four main phases:
 
-# 5. Run the reproduction pipeline:
-python reproduction_pipeline.py
+Data Extraction & Database Setup
 
-# 6. The results are stored in src/network_analysis/results/ directory
+Automated retrieval from Pathway Commons, AnimalTFDB, CellTalkDB, TCGA, and other repositories.
 
-Full Implementation
+Data are cleaned, transformed, and stored in a MySQL relational database.
 
-For the full pipeline run which may take up to 24 hours on standard PC and requires manual adjustments or filtration follow these steps:
-bash
+Automated Data Filtering & Network Construction
 
-# 1. Upload repository and setup environment:
-git clone https://github.com/098rk/ovarian_cancer_network_analysis-.git
-cd ovarian_cancer_network_analysis-
-conda env create -f environment.yml
-conda activate ovarian-cancer-networks
+Filtration of irrelevant interactions and low-confidence edges using Python/Pandas scripts.
 
-# 2. Manual configuration required:
-# - Adjust the database connection parameters in database_setup.py
-# - Filter the data removing low-quality samples in data filtration process
-# - Set pathway-specific thresholds in configuration files
+Construction of a directed, weighted network integrating:
 
-# 3. Run complete analysis:
-python src/network_analysis/run_pipeline.py
+Transcription factors
 
-# OR run individual analyses:
-python src/network_analysis/boolean_networks.py        # Boolean modeling
-python src/network_analysis/random_walk.py             # Random walk analysis
-python src/network_analysis/centrality_measures.py     # PageRank and centrality
-python src/network_analysis/MAPK.py                    # MAPK pathway analysis
-python src/network_analysis/model_training_and_evaluation.py  # RCNN analysis
+Protein-protein interactions
 
-Detailed Description of the Repository
-Repository Structure
-text
+Ligand-receptor pairs
 
-ovarian_cancer_network_analysis/
-├── src/network_analysis/
-│   ├── 📊 Data Files
-│   │   ├── AnimalTFData.csv              # Transcription factor database
-│   │   ├── CellTalk.csv                  # Cell-cell communication data
-│   │   ├── ClinicalData.csv              # Patient clinical information
-│   │   ├── ovarian_cancer_diffexp.csv    # Differential expression data
-│   │   ├── TCGA.OV.sampleMap_HiSeq.gz    # TCGA ovarian cancer genomic data
-│   │   └── meta_*.csv files              # TCGA metadata (clinical, mutations, expression)
-│   │
-│   ├── 🔬 Data Extraction & Network Construction
-│   │   ├── pathway_commons.py            # Extract pathway interactions
-│   │   ├── animal_tf.py                  # Get transcription factor data
-│   │   ├── celltalk_loader.py            # Process ligand-receptor pairs
-│   │   ├── data filtration process/      # Quality control and filtering
-│   │   └── database_setup.py             # MySQL database management
-│   │
-│   ├── 🧮 Multi-Algorithmic Analysis
-│   │   ├── boolean_networks.py           # Boolean modeling of network dynamics
-│   │   ├── random_walk.py                # Random walk simulations
-│   │   ├── centrality_measures.py        # PageRank and centrality analysis
-│   │   ├── model_training_and_evaluation.py  # RCNN for temporal patterns
-│   │   ├── layer_network.py              # Multi-layer network construction
-│   │   └── RCNN_MPAK_CELL_CYCLE/         # RCNN implementations
-│   │
-│   ├── 🧪 Pathway-Specific Validation
-│   │   ├── MAPK.py                       # MAPK signaling pathway analysis
-│   │   ├── Cell Cycle and MAPK signaling/ # Network validation tests
-│   │   └── ov_py/                        # Ovarian cancer specific scripts
-│   │
-│   ├── 📈 Results Directory
-│   │   ├── python_analysis_results.md    # p53 and NF-κB pathway results
-│   │   ├── mapk_cell_cycle_results.md    # MAPK and Cell Cycle analysis
-│   │   └── results/                      # Generated analysis results
-│   │       ├── Algorithm Performance Results Computational Efficiency
-│   │       ├── Betweenness Centrality Results
-│   │       ├── Boolean Network Simulation Results
-│   │       ├── Comprehensive Network Metrics
-│   │       ├── Correlation Analysis
-│   │       ├── Degree Centrality Rankings
-│   │       ├── Key Biological Insights from Python Analysis Network Architecture Findings
-│   │       ├── Limitations and Technical Notes Analysis Constraints
-│   │       ├── Model Validation Results
-│   │       ├── NF-κB Pathway Node Connectivity
-│   │       ├── Network Topology Statistics
-│   │       ├── Ovarian Cancer Relevance
-│   │       ├── Ovarian Cancer Specific Results Therapeutic Target Prioritization
-│   │       ├── PageRank Algorithm Results
-│   │       ├── Pathway Cross-Talk Analysis
-│   │       ├── Pathway-Specific Analysis Results p53 Pathway Node Connectivity
-│   │       ├── Perturbation Analysis Results
-│   │       ├── Random Walk Simulation Results Signal Propagation Analysis
-│   │       ├── Signal Flow Efficiency
-│   │       ├── Therapeutic Implications
-│   │       └── Therapeutic Target Prioritization
-│   │
-│   └── ⚙️  Orchestration
-│       ├── run_pipeline.py               # Master script for end-to-end execution
-│       ├── reproduction_pipeline.py      # Quick reproduction pipeline
-│       ├── setup.py                      # Package configuration
-│       └── Detailed SQL DDL Script for Database Implementation
-│
-└── 📚 Documentation
-    ├── environment.yml                   # Conda environment specification
-    ├── Citation                         # Thesis citation
-    └── Repository Structure             # Detailed file structure
-
-File Descriptions
-Data Extraction & Network Construction
-
-    pathway_commons.py - Extracts biological pathway interactions from Pathway Commons database via API
-
-    animal_tf.py - Retrieves comprehensive transcription factor data from AnimalTFDB 3.0
-
-    celltalk_loader.py - Processes ligand-receptor pairs from CellTalkDB for cell communication analysis
-
-    database_setup.py - MySQL database initialization with relational schema enforcement
-
-    data filtration process - Quality control scripts for filtering low-quality samples
+Mutation data
 
 Multi-Algorithmic Analysis
 
-    boolean_networks.py - Boolean modeling for dynamic state analysis of signaling networks
+Boolean modeling (boolean_networks.py) – Analyzes network dynamics.
 
-    random_walk.py - Random walk simulations for stochastic network exploration
+PageRank & centrality (centrality_measures.py) – Quantifies node importance.
 
-    centrality_measures.py - Computes PageRank, degree, and betweenness centrality metrics
+Random Walk analysis (random_walk.py) – Stochastic network exploration.
 
-    model_training_and_evaluation.py - RCNN implementation for temporal pattern recognition
+RCNN modeling (model_training_and_evaluation.py) – Temporal pattern recognition.
 
-    layer_network.py - Multi-layer network construction and analysis
+Validation & Generalization
 
-Pathway-Specific Validation
+Batch processing for Cell Cycle and MAPK pathways.
 
-    MAPK.py - Comprehensive MAPK signaling pathway analysis and cross-talk validation
+Robustness testing under node removal conditions.
 
-    Cell Cycle and MAPK signaling - Cell cycle network construction and comparative analysis
+Output aggregation and visualizations.
 
-    ov_py - Ovarian cancer-specific network analysis focusing on TCGA-OV data
 
-Orchestration
+Full Pipeline Execution (End-to-End)
 
-    run_pipeline.py - Master script coordinating data extraction, network construction, and multi-algorithmic analysis
+For a full run, which may take longer (~xx hours) and includes automated filtration and parameter adjustments:
 
-    reproduction_pipeline.py - Optimized pipeline for quick reproduction of core results
+Clone the repository (as above).
 
-Data Files Description
-Core Biological Data
+Set up the database (as above).
 
-    AnimalTFData.csv - Comprehensive transcription factor database from AnimalTFDB
+Adjust parameters in scripts (optional):
 
-    CellTalk.csv - Cell-cell communication interactions and pathways from CellTalkDB
+layer_network.py, boolean_networks.py, model_training_and_evaluation.py → update analysis parameters or thresholds.
 
-    ClinicalData.csv - Patient clinical information and treatment outcomes from TCGA
+Automated Data Filtering & Processing
 
-    ovarian_cancer_diffexp.csv - Differential expression analysis results for ovarian cancer
+Python/Pandas scripts remove irrelevant interactions and low-confidence edges from:
 
-TCGA Meta Data
+AnimalTFData.csv
 
-    meta_clinical_patient.csv - Patient clinical metadata including staging and survival
+CellTalk.csv
 
-    meta_mutations.csv - Somatic mutation data for ovarian cancer samples
+meta_clinical_patient.csv
 
-    meta_mrna_seq_*.csv - mRNA sequencing data in multiple formats (FPKM, TPM, read counts)
+meta_mrna_seq_*.csv
 
-    meta_study.csv - Study metadata and sample descriptions
+meta_mutations.csv
 
-Analysis Pipeline
-Phase 1: Data Extraction
+Ensures only biologically relevant nodes and interactions are retained.
 
-    Automated API calls to Pathway Commons, AnimalTFDB, CellTalkDB
+Run the complete pipeline
 
-    Data transformation and quality control
-
-    MySQL database population with structured schema
-
-Phase 2: Network Construction
-
-    PubMed ID and KEGG pathway-based filtering
-
-    Directed network graph construction using NetworkX
-
-    Mutation-based edge weight assignment from TCGA-OV data
-
-    Integration of TF, ligand-receptor, and protein-protein interactions
-
-Phase 3: Multi-Algorithmic Analysis
-
-    Boolean modeling for dynamic state analysis
-
-    PageRank and centrality measures for topological importance
-
-    Random walk simulations for stochastic network exploration
-
-    RCNN for temporal pattern recognition
-
-Phase 4: Validation & Generalization
-
-    Batch processing across Cell Cycle and MAPK signaling pathways
-
-    Comparative analysis and robustness testing
-
-    Results aggregation and therapeutic target prioritization
-
-Key Outputs
-Network Analysis Results
-
-    Integrated multi-omics networks with mutation-weighted edges
-
-    Key regulatory nodes: NF-κB, p53, ATM as master regulators
-
-    Novel therapeutic targets: IKKα, Wip1 identified through network analysis
-
-    Cross-pathway validation results from Cell Cycle and MAPK analyses
-
-Computational Findings
-
-    p53-NF-κB Network: 43 nodes, scale-free topology confirmed
-
-    Cell Cycle Network: 79 nodes, hierarchical organization
-
-    MAPK Network: 71 nodes, distributed signaling architecture
-
-    Network robustness quantified through perturbation analysis
-
-Automated vs. Manual Components
-Fully Automated
-
-    Data extraction and transformation from biological databases
-
-    Network construction and topological computation
-
-    Multi-algorithmic execution (Boolean, PageRank, Random Walks, RCNN)
-
-    Batch processing and results aggregation
-
-    Database management and schema enforcement
-
-Researcher-Guided
-
-    Biological context specification and pathway selection
-
-    Parameter tuning for analytical methods
-
-    Interpretation and validation of computational findings
-
-    Therapeutic target prioritization based on domain knowledge
-
-Dependencies
-bash
-
-# Core requirements
-Python 3.8+
-MySQL Server
-NetworkX, pandas, numpy, scikit-learn
-TensorFlow/Keras (for RCNN)
-Matplotlib for visualizations
-
-Citation
-
-If you use this computational framework in your research, please cite:
-bibtex
-
-@phdthesis{khan2025development,
-  title={Development of Methods for Identifying Key Variables in Complex Mathematical Models of Biological Systems},
-  author={Khan, Ruby},
-  year={2025},
-  school={Silesian University of Technology}
-}
-
-Contact
-
-Ruby Khan - ruby.khan@polsl.pl\rubykhanutk@gmail.com
-
-Project Link: https://github.com/098rk/ovarian_cancer_network_analysis-
-
-This repository contains the complete computational pipeline for the PhD thesis "Development of Methods for Identifying Key Variables in Complex Mathematical Models of Biological Systems" submitted to Silesian University of Technology, Poland.
+Run the complete pipeline:
