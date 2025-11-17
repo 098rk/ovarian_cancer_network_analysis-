@@ -1,0 +1,6 @@
+p53 Pathway Hub Analysis:
+- p53-p: 10 connections (super-hub)
+- ATMa-p: 6 connections (DNA damage hub)
+- Mdm2-p cyt: 3 connections (feedback regulation)
+- ATM mRNA: 3 connections (upstream regulation)
+- p53: 2 connections (inactive form)
