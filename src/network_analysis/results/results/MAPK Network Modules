@@ -1,0 +1,17 @@
+G1/S Transition Module:
+- Core Nodes: Cyclin D1, CDK4/6, Rb, E2F1
+- Average Degree: 8.7
+- Module Density: 0.078
+- Key Function: G1 to S phase progression
+
+DNA Damage Response Module:
+- Core Nodes: ATM, ATR, Chk1, Chk2, p53
+- Average Degree: 7.9
+- Module Density: 0.065
+- Key Function: Damage sensing and repair
+
+G2/M Checkpoint Module:
+- Core Nodes: Cyclin B1, CDK1, CDC25, PLK1
+- Average Degree: 6.8
+- Module Density: 0.059
+- Key Function: Mitotic entry control
