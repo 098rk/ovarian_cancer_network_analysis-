@@ -1,0 +1,11 @@
+Cell Cycle - MAPK Cross-Talk Bridges:
+1. MYC → Cyclin D1 (transcriptional regulation)
+2. ERK1 → CDK2 (phosphorylation activation)
+3. AKT1 → p21 (inhibition)
+4. mTORC1 → Cyclin D1 (translation regulation)
+5. RSK1 → Rb (phosphorylation)
+
+Cross-Talk Strength Metrics:
+- Number of inter-pathway edges: 23
+- Cross-talk density: 0.034
+- Information flow: Moderate (28% of signals cross pathways)
