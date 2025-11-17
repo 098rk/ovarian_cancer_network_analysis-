@@ -1,0 +1,6 @@
+NF-κB Pathway Hub Analysis:
+- NF-κB: 5 connections (master regulator)
+- IKKb: 2 connections (kinase activity)
+- TNFR1: 2 connections (receptor signaling)
+- TNFa: 1 connection (ligand)
+- A20 mRNA: 2 connections (feedback)
