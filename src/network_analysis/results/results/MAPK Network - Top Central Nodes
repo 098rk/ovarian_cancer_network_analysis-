@@ -1,0 +1,25 @@
+Degree Centrality Rankings:
+1. EGFR - Degree: 18
+2. RAS - Degree: 16
+3. ERK1 - Degree: 14
+4. AKT1 - Degree: 13
+5. PI3K - Degree: 12
+6. MEK1 - Degree: 11
+7. mTORC1 - Degree: 10
+8. RAF1 - Degree: 9
+9. PDK1 - Degree: 8
+10. MYC - Degree: 7
+
+Betweenness Centrality Scores:
+1. EGFR: 0.312
+2. RAS: 0.278
+3. ERK1: 0.234
+4. AKT1: 0.221
+5. PI3K: 0.198
+
+PageRank Scores:
+1. EGFR: 0.048
+2. RAS: 0.045
+3. ERK1: 0.041
+4. AKT1: 0.038
+5. PI3K: 0.035
