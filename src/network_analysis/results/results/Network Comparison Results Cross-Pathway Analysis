@@ -1,0 +1,15 @@
+Comparative Metrics:
+                   Cell Cycle    MAPK
+Nodes:              79           71
+Edges:              332          325
+Average Degree:     8.4          9.2
+Diameter:           6            5
+Clustering:         0.127        0.142
+Density:            0.054        0.065
+Robustness:         0.76         0.72
+
+Key Differences:
+- MAPK has higher connectivity (avg degree 9.2 vs 8.4)
+- Cell Cycle has longer paths (diameter 6 vs 5)
+- MAPK more clustered (0.142 vs 0.127)
+- Cell Cycle more robust to random failures
