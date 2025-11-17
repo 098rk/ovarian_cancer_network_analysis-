@@ -1,0 +1,17 @@
+Cell Cycle Network Analysis:
+- Network Construction: 0.018 seconds
+- Centrality Calculations: 0.035 seconds
+- Random Walk Simulations: 1.234 seconds
+- Boolean Modeling: 0.456 seconds
+- Total Analysis: 1.763 seconds
+
+MAPK Network Analysis:
+- Network Construction: 0.015 seconds
+- Centrality Calculations: 0.031 seconds
+- Random Walk Simulations: 1.127 seconds
+- Boolean Modeling: 0.412 seconds
+- Total Analysis: 1.615 seconds
+
+Memory Usage:
+- Peak Memory: 68.4 MB
+- Average Memory: 45.7 MB
