@@ -1,0 +1,11 @@
+Technical Limitations:
+- Network size: 43 nodes (medium-scale)
+- Edge types: Simplified to directed interactions
+- Dynamics: Static analysis with dynamic validation
+- Data source: Curated literature, not high-throughput
+
+Computational Assumptions:
+- Equal edge weights in initial analysis
+- Binary interactions in Boolean model
+- Homogeneous node properties
+- Steady-state assumptions for some analyses
