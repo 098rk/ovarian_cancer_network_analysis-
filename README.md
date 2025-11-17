@@ -9,10 +9,6 @@ It implements the methodology developed in the PhD thesis:
 The pipeline integrates Boolean modeling, PageRank centrality, Random Walk analysis, and RCNNs to systematically uncover master regulators and potential therapeutic targets.
 
 
-Here’s a polished version of your **Quick Reproduction** section formatted correctly for a GitHub README:
-
----
-
 ## Quick Reproduction
 
 To quickly reproduce the results (≈4–8 hours on a standard PC), follow these steps:
