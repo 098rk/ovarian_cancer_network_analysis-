@@ -9,20 +9,63 @@ It implements the methodology developed in the PhD thesis:
 The pipeline integrates Boolean modeling, PageRank centrality, Random Walk analysis, and RCNNs to systematically uncover master regulators and potential therapeutic targets.
 
 
-Quick Reproduction
+Here’s a polished version of your **Quick Reproduction** section formatted correctly for a GitHub README:
 
-For quick reproduction of results (≈4–8 hours on a standard PC), follow these steps:
+---
 
-1. Clone the repository:
-git clone https://github.com/098rk/ovarian_cancer_network_analysis-.git
-2. cd ovarian_cancer_network_analysis-
-3. Data Extraction: Use the pathwaycommon.py, animaltf.py,celltalk.py,tcga.py for data extraction
-4. Set up the MySQL database:
-python src/network_analysis/database_setup.py and add the dowlloaded data
-5. Import prefiltered data from MYSQL database (to filter): Filtra data using filter data file
-6. Navigate to analysis directory: cd src/network_analysis
-7.Run the quick reproduction script: python reproduction_pipeline.py
-8.Results location: results/  # Contains all output files including Boolean simulations, centrality, Random Walk results
+## Quick Reproduction
+
+To quickly reproduce the results (≈4–8 hours on a standard PC), follow these steps:
+
+1. **Clone the repository**:
+
+   ```bash
+   git clone https://github.com/098rk/ovarian_cancer_network_analysis-.git
+   cd ovarian_cancer_network_analysis-
+   ```
+
+2. **Data Extraction**
+   Use the provided scripts to extract the required datasets:
+
+   ```bash
+   python src/network_analysis/pathway_commons.py
+   python src/network_analysis/animal_tf.py
+   python src/network_analysis/celltalk_loader.py
+   python src/network_analysis/tcga.py
+   ```
+
+3. **Set up the MySQL database**
+
+   ```bash
+   python src/network_analysis/database_setup.py
+   ```
+
+   * Add the downloaded data files to the database as needed.
+
+4. **Import prefiltered data**
+
+   * Use the included filtering script to clean and filter the database for relevant interactions.
+
+5. **Navigate to the analysis directory**:
+
+   ```bash
+   cd src/network_analysis
+   ```
+
+6. **Run the quick reproduction script**:
+
+   ```bash
+   python reproduction_pipeline.py
+   ```
+
+7. **Results location**
+
+   * All outputs are stored in the `results/` directory, including:
+
+     * Boolean network simulations
+     * Centrality measures (PageRank, degree, betweenness)
+     * Random Walk simulation results
+     * RCNN
 
 
 Overview of Pipeline
