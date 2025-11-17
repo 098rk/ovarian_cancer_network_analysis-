@@ -1,0 +1,10 @@
+# Random Walk Results (1000 simulations, 50 steps)
+Most Frequently Visited Nodes:
+1. p53-p: 22.3% visit frequency
+2. ATMa-p: 18.7% visit frequency  
+3. NF-κB: 15.4% visit frequency
+4. Wip1 mRNA: 12.8% visit frequency
+5. Mdm2-p cyt: 9.6% visit frequency
+
+Average Path Length: 4.833 steps
+Network Coverage: 100% nodes visited
