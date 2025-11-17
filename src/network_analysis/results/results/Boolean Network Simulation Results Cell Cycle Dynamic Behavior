@@ -1,0 +1,13 @@
+# Boolean Model Analysis
+Stable States: 4
+Oscillatory Patterns: Yes (cell cycle progression)
+Key Feedback Loops:
+- p53-MDM2 negative feedback
+- Rb-E2F mutual regulation
+- Cyclin-CDK activation loops
+
+State Transition Patterns:
+- G1 phase: 32% of time
+- S phase: 28% of time  
+- G2 phase: 25% of time
+- M phase: 15% of time
