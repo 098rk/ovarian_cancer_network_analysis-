@@ -1,0 +1,4 @@
+Centrality Measure Correlations:
+Degree-Betweenness: r = 0.892, p < 0.001
+Degree-PageRank: r = 0.845, p < 0.001  
+Betweenness-PageRank: r = 0.798, p < 0.001
