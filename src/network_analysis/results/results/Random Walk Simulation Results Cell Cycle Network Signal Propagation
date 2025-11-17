@@ -1,0 +1,12 @@
+# Random Walk Results (1000 simulations, 50 steps)
+Starting Node: Cyclin D1
+Most Frequently Visited Nodes:
+1. p53: 8.7 visits/walk (17.4%)
+2. Cyclin D1: 7.9 visits/walk (15.8%)
+3. E2F1: 6.4 visits/walk (12.8%)
+4. CDK2: 5.8 visits/walk (11.6%)
+5. ATM: 5.2 visits/walk (10.4%)
+
+Network Coverage: 98.7% nodes visited
+Average Path Length: 3.8 steps
+Convergence Time: 12.3 steps
