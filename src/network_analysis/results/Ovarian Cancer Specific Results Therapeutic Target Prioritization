@@ -1,0 +1,6 @@
+# Target Scores (Composite Metric)
+1. p53-p: Score = 0.94 (super-hub, high betweenness)
+2. ATMa-p: Score = 0.87 (DNA damage integration)
+3. NF-κB: Score = 0.82 (inflammation control)
+4. MDM2-p53 interaction: Score = 0.78 (feedback loop)
+5. IKK complex: Score = 0.73 (NF-κB activation)
