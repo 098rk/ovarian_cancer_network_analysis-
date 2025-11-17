@@ -1,0 +1,12 @@
+# Boolean Model Analysis
+Stable States: 3
+Oscillatory Patterns: Limited (sustained activation)
+Key Feedback Loops:
+- ERK-DUSP negative feedback
+- AKT-PTEN regulation
+- EGFR internalization cycle
+
+Activation Patterns:
+- Sustained activation: 45% of simulations
+- Transient activation: 38% of simulations
+- Oscillatory behavior: 17% of simulations
