@@ -1,44 +1,70 @@
-thesis_repository/
-├── README.md
-├── requirements.txt
-├── setup.py
-├── src/
-│   ├── __init__.py
-│   ├── data_acquisition/
-│   │   ├── __init__.py
-│   │   ├── pathway_commons.py
-│   │   ├── celltalk_db.py
-│   │   ├── animal_tf.py
-│   │   └── tcga_ov.py
-│   ├── network_analysis/
-│   │   ├── __init__.py
-│   │   ├── boolean_networks.py
-│   │   ├── pagerank_analysis.py
-│   │   ├── random_walk.py
-│   │   └── centrality_measures.py
-│   ├── database/
-│   │   ├── __init__.py
-│   │   ├── schema.sql
-│   │   └── database_manager.py
-│   └── visualization/
-│       ├── __init__.py
-│       └── network_plots.py
-├── config/
-│   └── settings.py
-├── tests/
-│   ├── __init__.py
-│   ├── test_data_acquisition.py
-│   └── test_network_analysis.py
-├── scripts/
-│   ├── run_pipeline.py
-│   └── reproduce_analysis.py
-├── data/
-│   ├── raw/
-│   ├── processed/
-│   └── results/
-├── notebooks/
-│   └── exploratory_analysis.ipynb
-├── docs/
-│   ├── installation.md
-│   └── usage.md
-└── environment.yml
+Detailed Description of the Repository
+Repository Structure
+text
+
+ovarian_cancer_network_analysis/
+├── src/network_analysis/
+│   ├── 📊 Data Files
+│   │   ├── AnimalTFData.csv              # Transcription factor database
+│   │   ├── CellTalk.csv                  # Cell-cell communication data
+│   │   ├── ClinicalData.csv              # Patient clinical information
+│   │   ├── ovarian_cancer_diffexp.csv    # Differential expression data
+│   │   ├── TCGA.OV.sampleMap_HiSeq.gz    # TCGA ovarian cancer genomic data
+│   │   └── meta_*.csv files              # TCGA metadata (clinical, mutations, expression)
+│   │
+│   ├── 🔬 Data Extraction & Network Construction
+│   │   ├── pathway_commons.py            # Extract pathway interactions
+│   │   ├── animal_tf.py                  # Get transcription factor data
+│   │   ├── celltalk_loader.py            # Process ligand-receptor pairs
+│   │   ├── data filtration process/      # Quality control and filtering
+│   │   └── database_setup.py             # MySQL database management
+│   │
+│   ├── 🧮 Multi-Algorithmic Analysis
+│   │   ├── boolean_networks.py           # Boolean modeling of network dynamics
+│   │   ├── random_walk.py                # Random walk simulations
+│   │   ├── centrality_measures.py        # PageRank and centrality analysis
+│   │   ├── model_training_and_evaluation.py  # RCNN for temporal patterns
+│   │   ├── layer_network.py              # Multi-layer network construction
+│   │   └── RCNN_MPAK_CELL_CYCLE/         # RCNN implementations
+│   │
+│   ├── 🧪 Pathway-Specific Validation
+│   │   ├── MAPK.py                       # MAPK signaling pathway analysis
+│   │   ├── Cell Cycle and MAPK signaling/ # Network validation tests
+│   │   └── ov_py/                        # Ovarian cancer specific scripts
+│   │
+│   ├── 📈 Results Directory
+│   │   ├── python_analysis_results.md    # p53 and NF-κB pathway results
+│   │   ├── mapk_cell_cycle_results.md    # MAPK and Cell Cycle analysis
+│   │   └── results/                      # Generated analysis results
+│   │       ├── Algorithm Performance Results Computational Efficiency
+│   │       ├── Betweenness Centrality Results
+│   │       ├── Boolean Network Simulation Results
+│   │       ├── Comprehensive Network Metrics
+│   │       ├── Correlation Analysis
+│   │       ├── Degree Centrality Rankings
+│   │       ├── Key Biological Insights from Python Analysis Network Architecture Findings
+│   │       ├── Limitations and Technical Notes Analysis Constraints
+│   │       ├── Model Validation Results
+│   │       ├── NF-κB Pathway Node Connectivity
+│   │       ├── Network Topology Statistics
+│   │       ├── Ovarian Cancer Relevance
+│   │       ├── Ovarian Cancer Specific Results Therapeutic Target Prioritization
+│   │       ├── PageRank Algorithm Results
+│   │       ├── Pathway Cross-Talk Analysis
+│   │       ├── Pathway-Specific Analysis Results p53 Pathway Node Connectivity
+│   │       ├── Perturbation Analysis Results
+│   │       ├── Random Walk Simulation Results Signal Propagation Analysis
+│   │       ├── Signal Flow Efficiency
+│   │       ├── Therapeutic Implications
+│   │       └── Therapeutic Target Prioritization
+│   │
+│   └── ⚙️  Orchestration
+│       ├── run_pipeline.py               # Master script for end-to-end execution
+│       ├── reproduction_pipeline.py      # Quick reproduction pipeline
+│       ├── setup.py                      # Package configuration
+│       └── Detailed SQL DDL Script for Database Implementation
+│
+└── 📚 Documentation
+    ├── environment.yml                   # Conda environment specification
+    ├── Citation                         # Thesis citation
+    └── Repository Structure             # Detailed file structure
