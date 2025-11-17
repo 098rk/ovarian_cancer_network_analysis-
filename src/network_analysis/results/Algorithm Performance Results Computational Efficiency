@@ -1,0 +1,8 @@
+Algorithm Execution Times:
+- Network Construction: 0.012 seconds
+- Centrality Calculations: 0.028 seconds
+- Random Walk Simulations: 0.845 seconds
+- Boolean Modeling: 0.234 seconds
+- Total Analysis: 1.155 seconds
+
+Memory Usage: 45.2 MB peak
