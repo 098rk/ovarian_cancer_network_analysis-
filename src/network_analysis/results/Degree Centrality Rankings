@@ -1,0 +1,7 @@
+Top 10 Nodes by Degree Centrality:
+1. p53-p (Phosphorylated p53) - Degree: 10
+2. ATMa-p (Phosphorylated Active ATM) - Degree: 6
+3. NF-κB (Nuclear Factor Kappa B) - Degree: 5
+4. Wip1 mRNA - Degree: 4
+5. Mdm2-p cyt, ATM mRNA, MRN-p, AKT-p, CREB - Degree: 3
+6. DSB, Mdm2-p cyt, KSRP-p, Chk2-p, Bax, p21, PTEN, PIP2, PIP3, TNFR1, IKKKa, IKKa, A20 mRNA, IKKb - Degree: 2
