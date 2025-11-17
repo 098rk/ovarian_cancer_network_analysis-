@@ -1,0 +1,9 @@
+# Boolean Model State Transitions
+Stable States Found: 3
+Oscillatory Patterns: Yes (feedback loops)
+Sensitivity to Initial Conditions: High
+
+Key Regulatory Patterns:
+- p53-MDM2 negative feedback oscillation
+- NF-κB-IκB negative regulation
+- ATM-p53 positive reinforcement
