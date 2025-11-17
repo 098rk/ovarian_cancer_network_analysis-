@@ -1,0 +1,19 @@
+# Cell Cycle Network Resilience
+Critical Node Removal Impact:
+- p53 removal: 42% network efficiency loss
+- Cyclin D1 removal: 35% network efficiency loss
+- E2F1 removal: 28% network efficiency loss
+- Random node removal: 8% average efficiency loss
+
+Robustness Score: 0.76 (scale 0-1)
+Fragility Points: p53, Cyclin D1, E2F1
+
+# MAPK Network Resilience
+Critical Node Removal Impact:
+- EGFR removal: 48% network efficiency loss
+- RAS removal: 41% network efficiency loss
+- ERK1 removal: 33% network efficiency loss
+- Random node removal: 7% average efficiency loss
+
+Robustness Score: 0.72 (scale 0-1)
+Fragility Points: EGFR, RAS, ERK1
