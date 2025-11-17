@@ -1,0 +1,25 @@
+Degree Centrality Rankings:
+1. p53 - Degree: 15
+2. Cyclin D1 - Degree: 14
+3. E2F1 - Degree: 12
+4. CDK2 - Degree: 11
+5. ATM - Degree: 10
+6. Cyclin E1 - Degree: 9
+7. CDK4 - Degree: 9
+8. Rb - Degree: 8
+9. Mdm2 - Degree: 8
+10. p21 - Degree: 7
+
+Betweenness Centrality Scores:
+1. p53: 0.245
+2. Cyclin D1: 0.198
+3. E2F1: 0.167
+4. ATM: 0.154
+5. CDK2: 0.142
+
+PageRank Scores:
+1. p53: 0.042
+2. Cyclin D1: 0.038
+3. E2F1: 0.035
+4. CDK2: 0.032
+5. ATM: 0.029
