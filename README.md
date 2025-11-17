@@ -1,18 +1,62 @@
-# Ovarian Cancer Network Analysis Pipeline
+Ovarian Cancer Network Analysis Pipeline – Overview for Reproducibility
 
-A comprehensive computational framework for identifying key regulatory nodes in biological signaling networks through integrated multi-omics data analysis and network modeling. This reproducible pipeline implements the methodology developed in the PhD thesis *"Development of Methods for Identifying Key Variables in Complex Mathematical Models of Biological Systems."*
+This pipeline provides a reproducible computational framework for identifying key regulatory nodes in ovarian cancer signaling networks using integrated multi-omics data. It implements the methodology developed in the PhD thesis “Development of Methods for Identifying Key Variables in Complex Mathematical Models of Biological Systems.” The pipeline combines Boolean modeling, PageRank centrality, Random Walk analysis, and RCNNs to systematically uncover master regulators and potential therapeutic targets.
 
-**Reproducibility Note:**  
-Once the filtered network is generated, reproducing the complete set of analyses — including network construction, filtering, topological analysis, Boolean simulations, and random walk experiments — typically requires **approximately 6 to 8 hours** on a standard desktop computer.
+Overall Description
 
-## Research Hypotheses
+Data Acquisition & Database Setup:
+Data are automatically extracted from Pathway Commons, AnimalTFDB, CellTalkDB, TCGA, and other repositories. The extracted data are preprocessed, quality-checked, and stored in a MySQL relational database with a structured schema.
 
-- **H1:** Integrated computational pipeline combining Boolean modeling, PageRank, and random walk algorithms consistently identifies key regulatory nodes (NF-κB, p53, ATM) with >80% convergence across methods  
-- **H2:** Multi-omics data integration uncovers regulatory elements (IKKα, Wip1) with high centrality scores representing novel therapeutic targets  
-- **H3:** Methodology demonstrates ≥85% robustness and generalizability across Cell Cycle and MAPK signaling pathways
+Network Construction & Filtering:
+A directed, weighted network is built integrating transcription factors, protein-protein interactions, ligand-receptor pairs, and mutation data. Filtering is applied based on pathway relevance and experimental evidence.
 
-## Quick Start
+Multi-Algorithmic Analysis:
+The pipeline applies multiple computational approaches to rank nodes and identify master regulators:
 
+Boolean modeling for dynamic state analysis.
+
+PageRank and centrality measures for topological importance.
+
+Random Walk simulations for stochastic network exploration.
+
+RCNN for temporal pattern recognition.
+
+Validation & Generalization:
+Analyses are validated across Cell Cycle and MAPK signaling networks. Robustness testing and comparison across pathways ensure reproducibility and consistency.
+
+Outputs:
+
+Curated multi-omics network with weighted edges.
+
+Key regulatory nodes (NF-κB, p53, ATM) and novel targets (IKKα, Wip1).
+
+Therapeutic target prioritization and cross-pathway validation results.
+
+Network topology metrics and visualizations.
+
+Reproducibility Notes
+
+Running the entire end-to-end analysis (data setup, network construction, filtering, multi-algorithmic analyses, and visualization) takes approximately 6–8 hours on a standard desktop computer.
+
+The MySQL database ensures consistent data management, while scripts provide step-by-step automation with options for manual inspection at biologically sensitive steps.
+
+A GitHub repository hosts all code, configuration files, example datasets, and detailed instructions.
+
+Dependencies
+
+Python 3.8+, MySQL Server, NetworkX, pandas, numpy, scikit-learn, TensorFlow/Keras, Cytoscape (optional for visualization).
+
+Environment and dependencies can be installed via environment.yml or requirements.txt.
+
+Quick Start
+
+Clone the repository and set up the conda environment.
+
+Configure database parameters and initialize the MySQL database.
+
+Run the master pipeline script: run_pipeline.py
+
+Optionally, execute individual modules (Boolean, Random Walk, PageRank, RCNN) for testing or validation.
 
 ### Installation
 
