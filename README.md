@@ -68,77 +68,84 @@ To quickly reproduce the results (≈4–8 hours on a standard PC), follow these
      * RCNN
 
 
-Overview of Pipeline
+Here’s a polished, **GitHub-ready version** of your Overview and Full Pipeline Execution sections with proper formatting, code blocks, and clean structure:
 
-The pipeline consists of four main phases:
+---
 
-Data Extraction & Database Setup
+## Overview of Pipeline
 
-Automated retrieval from Pathway Commons, AnimalTFDB, CellTalkDB, TCGA, and other repositories.
+The pipeline consists of **four main phases**:
 
-Data are cleaned, transformed, and stored in a MySQL relational database.
+### 1. Data Extraction & Database Setup
 
-Automated Data Filtering & Network Construction
+* Automated retrieval from **Pathway Commons**, **AnimalTFDB**, **CellTalkDB**, **TCGA**, and other repositories.
+* Data are cleaned, transformed, and stored in a **MySQL relational database** for consistent management and reproducibility.
 
-Filtration of irrelevant interactions and low-confidence edges using Python/Pandas scripts.
+### 2. Automated Data Filtering & Network Construction
 
-Construction of a directed, weighted network integrating:
+* Python/Pandas scripts automatically filter **irrelevant interactions** and **low-confidence edges**.
+* Construction of a **directed, weighted network** integrating:
 
-Transcription factors
+  * Transcription factors
+  * Protein-protein interactions
+  * Ligand-receptor pairs
+  * Mutation data
 
-Protein-protein interactions
+### 3. Multi-Algorithmic Analysis
 
-Ligand-receptor pairs
+* **Boolean modeling** (`boolean_networks.py`) – analyzes network dynamics.
+* **PageRank & centrality** (`centrality_measures.py`) – quantifies node importance.
+* **Random Walk analysis** (`random_walk.py`) – stochastic network exploration.
+* **RCNN modeling** (`model_training_and_evaluation.py`) – temporal pattern recognition.
 
-Mutation data
+### 4. Validation & Generalization
 
-Multi-Algorithmic Analysis
+* Batch processing of **Cell Cycle** and **MAPK** pathways.
+* Robustness testing under **node removal conditions**.
+* Aggregation of outputs and visualization generation.
 
-Boolean modeling (boolean_networks.py) – Analyzes network dynamics.
+---
 
-PageRank & centrality (centrality_measures.py) – Quantifies node importance.
+## Full Pipeline Execution (End-to-End)
 
-Random Walk analysis (random_walk.py) – Stochastic network exploration.
+For a **full run**, which may take **longer (~xx hours)** and includes automated filtration and parameter adjustments:
 
-RCNN modeling (model_training_and_evaluation.py) – Temporal pattern recognition.
+1. **Clone the repository** (as in Quick Reproduction).
 
-Validation & Generalization
+2. **Set up the MySQL database** (as in Quick Reproduction).
 
-Batch processing for Cell Cycle and MAPK pathways.
+3. **Adjust parameters in scripts** (optional)
 
-Robustness testing under node removal conditions.
+   * Update thresholds or analysis parameters in:
 
-Output aggregation and visualizations.
+     * `layer_network.py`
+     * `boolean_networks.py`
+     * `model_training_and_evaluation.py`
 
+4. **Automated Data Filtering & Processing**
 
-Full Pipeline Execution (End-to-End)
+   * Python/Pandas scripts remove irrelevant interactions and low-confidence edges from:
 
-For a full run, which may take longer (~xx hours) and includes automated filtration and parameter adjustments:
+     * `AnimalTFData.csv`
+     * `CellTalk.csv`
+     * `meta_clinical_patient.csv`
+     * `meta_mrna_seq_*.csv`
+     * `meta_mutations.csv`
+   * Ensures only **biologically relevant nodes and interactions** are retained.
 
-Clone the repository (as above).
+5. **Run the complete pipeline**
 
-Set up the database (as above).
+   ```bash
+   python src/network_analysis/run_pipeline.py
+   ```
 
-Adjust parameters in scripts (optional):
+6. **Results**
 
-layer_network.py, boolean_networks.py, model_training_and_evaluation.py → update analysis parameters or thresholds.
+   * Stored in the `results/` directory, including:
 
-Automated Data Filtering & Processing
-
-Python/Pandas scripts remove irrelevant interactions and low-confidence edges from:
-
-AnimalTFData.csv
-
-CellTalk.csv
-
-meta_clinical_patient.csv
-
-meta_mrna_seq_*.csv
-
-meta_mutations.csv
-
-Ensures only biologically relevant nodes and interactions are retained.
-
-Run the complete pipeline
-
-Run the complete pipeline:
+     * Boolean network simulations
+     * Centrality measures (PageRank, degree, betweenness)
+     * Random Walk simulation results
+     * RCNN outputs
+     * Network visualizations
+     * Cell cycle and MPAK analysis
