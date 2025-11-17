@@ -1,0 +1,12 @@
+# Random Walk Results (1000 simulations, 50 steps)
+Starting Node: EGFR
+Most Frequently Visited Nodes:
+1. EGFR: 9.2 visits/walk (18.4%)
+2. RAS: 8.1 visits/walk (16.2%)
+3. ERK1: 7.3 visits/walk (14.6%)
+4. AKT1: 6.8 visits/walk (13.6%)
+5. PI3K: 5.9 visits/walk (11.8%)
+
+Network Coverage: 97.2% nodes visited
+Average Path Length: 4.1 steps
+Convergence Time: 14.2 steps
