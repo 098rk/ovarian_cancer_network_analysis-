@@ -1,0 +1,23 @@
+# Cell Cycle Network Statistics
+Degree Distribution:
+- Mean: 8.4
+- Variance: 12.7
+- Skewness: 1.89 (right-skewed)
+- Power-law fit: R² = 0.845
+
+Clustering Analysis:
+- Average Clustering: 0.127
+- Transitivity: 0.118
+- Assortativity: 0.234 (assortative)
+
+# MAPK Network Statistics
+Degree Distribution:
+- Mean: 9.2
+- Variance: 14.3
+- Skewness: 2.01 (right-skewed)
+- Power-law fit: R² = 0.812
+
+Clustering Analysis:
+- Average Clustering: 0.142
+- Transitivity: 0.134
+- Assortativity: 0.267 (assortative)
