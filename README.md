@@ -64,9 +64,6 @@ To quickly reproduce the results (≈4–8 hours on a standard PC), follow these
      * RCNN
 
 
-Here’s a polished, **GitHub-ready version** of your Overview and Full Pipeline Execution sections with proper formatting, code blocks, and clean structure:
-
----
 
 ## Overview of Pipeline
 
