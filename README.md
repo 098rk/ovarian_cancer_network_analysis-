@@ -101,8 +101,7 @@ The pipeline consists of **four main phases**:
 
 ## Full Pipeline Execution (End-to-End)
 
-For a **full run**, which may take **longer (~6-8 hours required for full implementation in additional network analysis will also include for additional network Cell Cycle and MPAK analysis scripts and results are also included in this GitHub)** and includes automated filtration and parameter adjustments:
-
+** The full implementation, which encompasses automated network filtration, parameter adjustments, and extended pathway analyses (Cell Cycle and MAPK), constitutes a complete run. Please note that a full run is computationally intensive and typically requires 6-8 hours. The repository provides the complete analysis scripts and results for these comprehensive network investigations.
 1. **Clone the repository** (as in Quick Reproduction).
 
 2. **Set up the MySQL database** (as in Quick Reproduction).
