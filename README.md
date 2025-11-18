@@ -101,7 +101,7 @@ The pipeline consists of **four main phases**:
 
 ## Full Pipeline Execution (End-to-End)
 
-For a **full run**, which may take **longer (~6-8 hours)** and includes automated filtration and parameter adjustments:
+For a **full run**, which may take **longer (~4-8 hours if you want to test on additional network which scripts and results arleady in this GitHub)** and includes automated filtration and parameter adjustments:
 
 1. **Clone the repository** (as in Quick Reproduction).
 
