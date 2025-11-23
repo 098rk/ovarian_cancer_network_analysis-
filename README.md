@@ -11,7 +11,7 @@ The pipeline integrates Boolean modeling, PageRank centrality, Random Walk analy
 
 ## Quick Reproduction
 
-To quickly reproduce the results (≈4–8 hours on a standard PC), follow these steps:
+To quickly reproduce the results (≈6–8 hours on a standard PC), follow these steps:
 
 1. **Clone the repository**:
 
