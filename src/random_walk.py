@@ -1,198 +1,180 @@
 import networkx as nx
 import numpy as np
-import pandas as pd
-import logging
-from typing import Dict, List, Tuple, Any
+import matplotlib
+matplotlib.use('TkAgg')  # Set the backend for interactive plotting
 import matplotlib.pyplot as plt
-from tqdm import tqdm
+from matplotlib import colors as mcolors
+from networkx.algorithms import community
 
-logger = logging.getLogger(__name__)
+# Create a directed graph
+G = nx.DiGraph()
 
-class RandomWalkAnalyzer:
-    """Random walk analysis for ovarian cancer networks."""
+# Define edges from the interaction data provided
+edges = [
+    ('p53', 'p53-p'), ('p53 mRNA', 'p53'), ('p53-p', 'Mdm2 mRNA'),
+    ('Mdm2 cyt', 'Mdm2-p cyt'), ('Mdm2 mRNA', 'Mdm2 cyt'),
+    ('Mdm2-p cyt', 'Mdm2-p nuc'), ('DSB', 'ATM-p'),
+    ('ATM mRNA', 'ATM'), ('p53-p', 'ATM mRNA'),
+    ('ATMa-p', 'p53-p'), ('ATMa-p', 'AKT-p'),
+    ('ATMa-p', 'KSRP-p'), ('ATMa-p', 'CREB'),
+    ('ATMa-p', 'Chk2-p'), ('ATM-p', 'MRN-p'),
+    ('DSB', 'MRN-p'), ('CREB', 'ATM mRNA'),
+    ('MRN-p', 'ATMa-p'), ('CREB', 'Wip1 mRNA'),
+    ('p53-p', 'Chk2 mRNA'), ('p53-p', 'Bax mRNA'),
+    ('p53-p', 'p21 mRNA'), ('p53-p', 'PTEN mRNA'),
+    ('p53-p', 'Wip1 mRNA'), ('Wip1 mRNA', 'Wip1'),
+    ('pre-miR-16', 'miR-16'), ('KSRP-p', 'pre-miR-16'),
+    ('Chk2 mRNA', 'Chk2'), ('Chk2-p', 'p53-p'),
+    ('Bax mRNA', 'Bax'), ('Bax', 'apoptosis'),
+    ('p21 mRNA', 'p21'), ('p21', 'cell cycle arrest'),
+    ('IR', 'DSB'), ('p53-p', 'PTEN mRNA'),
+    ('PTEN mRNA', 'PTEN'), ('PTEN', 'PIP2'),
+    ('PIP2', 'PIP3'), ('PIP3', 'AKT-p'),
+    ('AKT-p', 'Mdm2-p cyt'), ('TNFa', 'TNFR1'),
+    ('TNFR1', 'IKKKa'), ('IKKKa', 'IKKa'),
+    ('A20 mRNA', 'A20 cyt'), ('IKKa', 'NFkB'),
+    ('NFkB', 'IkBa mRNA'), ('NFkB', 'A20 mRNA'),
+    ('NFkB', 'p53 mRNA'), ('IkBa mRNA', 'IkBa'),
+    ('NFkB', 'Wip1 mRNA')
+]
+
+G.add_edges_from(edges)
+
+# Assign random weights to edges
+for u, v in G.edges():
+    G[u][v]['weight'] = np.random.rand()
+
+# Random Walk Function
+def random_walk(G, start_node, num_steps):
+    current_node = start_node
+    visiting_counts = {node: 0 for node in G.nodes()}
+
+    for _ in range(num_steps):
+        visiting_counts[current_node] += 1
+        neighbors = list(G.neighbors(current_node))
+        if not neighbors:
+            break
+        weights = [G[current_node][neighbor]['weight'] for neighbor in neighbors]
+        current_node = np.random.choice(neighbors, p=np.array(weights) / sum(weights))
+
+    return visiting_counts
+
+# Parameters for the random walk
+num_walks = 1000
+num_steps = 50
+start_node = 'p53'
+
+# Perform random walks
+total_visiting_counts = {node: 0 for node in G.nodes()}
+convergence_data = []
+
+for i in range(num_walks):
+    counts = random_walk(G, start_node, num_steps)
+    for node in total_visiting_counts:
+        total_visiting_counts[node] += counts[node]
+
+    # Record convergence data
+    unique_nodes_visited = sum(1 for count in total_visiting_counts.values() if count > 0)
+    convergence_data.append(unique_nodes_visited / len(G.nodes()))
+
+# Normalize visit counts
+for node in total_visiting_counts:
+    total_visiting_counts[node] /= num_walks
+
+# Plot Convergence Rate
+def plot_convergence_rate(convergence_data):
+    plt.figure(figsize=(10, 5))
+    plt.plot(convergence_data, marker='o')
+    plt.title('Convergence Rate of Random Walks', fontsize=14)
+    plt.xlabel('Number of Simulations', fontsize=12)
+    plt.ylabel('Proportion of Unique Nodes Visited', fontsize=12)
+    plt.grid()
+    plt.tight_layout()
+    plt.savefig('convergence_rate.png')
+    plt.show()
+
+# Function to plot the biological interaction network
+def plot_biological_network(G, visiting_counts):
+    fig, ax = plt.subplots(figsize=(14, 14))
+    pos = nx.spring_layout(G, k=0.5, iterations=50)
+
+    # Node sizes based on visiting counts
+    node_sizes = [500 * visiting_counts[node] + 50 for node in G.nodes()]
+
+    # Create a ScalarMappable for the color normalization
+    norm = plt.Normalize(vmin=0, vmax=max(total_visiting_counts.values()))
+    sm = plt.cm.ScalarMappable(cmap='viridis', norm=norm)
+    sm.set_array([])
+
+    # Draw nodes with improved aesthetics
+    node_colors = [sm.to_rgba(visiting_counts[node]) for node in G.nodes()]
+    nx.draw_networkx_nodes(G, pos, node_size=node_sizes, node_color=node_colors, alpha=0.9, edgecolors='black', ax=ax)
+
+    # Draw edges with colors based on weights
+    edge_colors = [plt.cm.Blues(G[u][v]['weight']) for u, v in G.edges()]
+    nx.draw_networkx_edges(G, pos, edge_color=edge_colors, alpha=0.8, style='solid', width=2, ax=ax)
+
+    # Add labels for nodes
+    labels = {node: node for node in G.nodes()}
+    nx.draw_networkx_labels(G, pos, labels, font_size=10, font_color='black', ax=ax)
+
+    # Add labels for edges with weights
+    edge_labels = {(u, v): f"{G[u][v]['weight']:.2f}" for u, v in G.edges()}
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color='red', ax=ax)
+
+    # Add colorbar
+    cbar = fig.colorbar(sm, ax=ax, label='Visit Count (normalized)', shrink=0.8, pad=0.02)
+
+    plt.title('Enhanced Visualization of the Biological Interaction Network', fontsize=16)
+    plt.axis('off')
+    plt.savefig('biological_network.png')
+    plt.show()
+
+# Function to plot normalized visit counts
+def plot_visit_counts(visiting_counts):
+    plt.figure(figsize=(12, 6))
+    nodes = list(visiting_counts.keys())
+    counts = list(visiting_counts.values())
     
-    def __init__(self, restart_prob: float = 0.15, convergence_threshold: float = 1e-6):
-        self.restart_prob = restart_prob
-        self.convergence_threshold = convergence_threshold
+    plt.bar(nodes, counts, color='royalblue')
+    plt.xlabel('Nodes', fontsize=12)
+    plt.ylabel('Normalized Visit Count', fontsize=12)
+    plt.title('Normalized Visit Counts per Node', fontsize=14)
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    plt.savefig('normalized_visit_counts.png')
+    plt.show()
+
+# Function to plot edge weights distribution
+def plot_edge_weights_distribution(G):
+    edge_weights = [G[u][v]['weight'] for u, v in G.edges()]
     
-    def setup_network_with_weights(self, edges_data: List[Tuple], mutation_data: Dict) -> nx.DiGraph:
-        """Set up network with biologically informed edge weights."""
-        G = nx.DiGraph()
-        
-        # Add nodes with initial weights
-        for node, mutation_prob in mutation_data.items():
-            G.add_node(node, weight=0.5, mutation_prob=mutation_prob)
-        
-        # Add edges with confidence scores
-        for u, v, confidence in edges_data:
-            p_u = mutation_data.get(u, 0.1)
-            p_v = mutation_data.get(v, 0.1)
-            
-            # Calculate combined weight based on mutation probability and confidence
-            edge_weight = p_u * p_v * confidence
-            G.add_edge(u, v, weight=edge_weight, confidence=confidence)
-        
-        # Normalize edge weights
-        self._normalize_edge_weights(G)
-        
-        logger.info(f"Network created with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
-        return G
-    
-    def _normalize_edge_weights(self, G: nx.DiGraph) -> None:
-        """Normalize edge weights to [0,1] range."""
-        max_weight = max(data['weight'] for _, _, data in G.edges(data=True))
-        if max_weight > 0:
-            for u, v in G.edges():
-                G[u][v]['weight'] /= max_weight
-    
-    def random_walk_with_restart(self, G: nx.DiGraph, num_walks: int = 5000, 
-                               walk_length: int = 15) -> Dict[str, Any]:
-        """Perform random walks with restart and track convergence."""
-        nodes = list(G.nodes())
-        node_visits = {node: 0 for node in nodes}
-        convergence_data = []
-        
-        logger.info(f"Starting {num_walks} random walks...")
-        
-        for walk_idx in tqdm(range(num_walks), desc="Random Walks"):
-            current_node = np.random.choice(nodes)
-            node_visits[current_node] += 1
-            
-            for step in range(walk_length):
-                if np.random.rand() < self.restart_prob:
-                    current_node = np.random.choice(nodes)
-                else:
-                    neighbors = list(G.successors(current_node))
-                    if neighbors:
-                        weights = [G[current_node][n]['weight'] for n in neighbors]
-                        total_weight = sum(weights)
-                        if total_weight > 0:
-                            probs = np.array(weights) / total_weight
-                            current_node = np.random.choice(neighbors, p=probs)
-                        else:
-                            current_node = np.random.choice(nodes)
-                    else:
-                        current_node = np.random.choice(nodes)
-                
-                node_visits[current_node] += 1
-            
-            # Track convergence every 100 walks
-            if walk_idx % 100 == 0:
-                convergence = self._calculate_convergence(node_visits, walk_idx + 1)
-                convergence_data.append(convergence)
-        
-        # Normalize visit counts
-        total_visits = sum(node_visits.values())
-        for node in node_visits:
-            G.nodes[node]['visit_frequency'] = node_visits[node] / total_visits
-        
-        results = {
-            'node_visits': node_visits,
-            'visit_frequencies': {node: G.nodes[node]['visit_frequency'] for node in nodes},
-            'convergence_data': convergence_data,
-            'graph': G
-        }
-        
-        logger.info("Random walk analysis completed")
-        return results
-    
-    def _calculate_convergence(self, node_visits: Dict, num_walks: int) -> float:
-        """Calculate convergence metric."""
-        total_visits = sum(node_visits.values())
-        if total_visits == 0:
-            return 0.0
-        
-        # Proportion of unique nodes visited
-        unique_visited = sum(1 for count in node_visits.values() if count > 0)
-        total_nodes = len(node_visits)
-        
-        return unique_visited / total_nodes
-    
-    def identify_significant_nodes(self, results: Dict, threshold: float = 0.01) -> List[str]:
-        """Identify statistically significant nodes based on visit frequency."""
-        visit_frequencies = results['visit_frequencies']
-        significant_nodes = [
-            node for node, freq in visit_frequencies.items() 
-            if freq > threshold
-        ]
-        
-        # Sort by significance
-        significant_nodes.sort(key=lambda x: visit_frequencies[x], reverse=True)
-        
-        logger.info(f"Identified {len(significant_nodes)} significant nodes")
-        return significant_nodes
-    
-    def calculate_network_robustness(self, G: nx.DiGraph, num_removals: int = 100) -> float:
-        """Calculate network robustness under random node removal."""
-        if G.number_of_nodes() == 0:
-            return 0.0
-            
-        original_components = nx.number_weakly_connected_components(G)
-        retained_connectivity = 0
-        
-        for _ in range(num_removals):
-            G_temp = G.copy()
-            nodes_to_remove = np.random.choice(
-                list(G_temp.nodes()), 
-                size=max(1, int(0.1 * G_temp.number_of_nodes())),  # Remove 10% of nodes
-                replace=False
-            )
-            G_temp.remove_nodes_from(nodes_to_remove)
-            
-            # Calculate remaining connectivity
-            current_components = nx.number_weakly_connected_components(G_temp)
-            if current_components <= original_components * 1.15:  # Within 15% tolerance
-                retained_connectivity += 1
-        
-        robustness = retained_connectivity / num_removals
-        logger.info(f"Network robustness: {robustness:.2%}")
-        
-        return robustness
-    
-    def perform_random_walks(self, data_dict: Dict) -> Dict[str, Any]:
-        """Main method to perform random walk analysis."""
-        try:
-            # Prepare sample data
-            edges_data = self._prepare_sample_edges()
-            mutation_data = self._prepare_sample_mutations()
-            
-            # Create network
-            G = self.setup_network_with_weights(edges_data, mutation_data)
-            
-            # Perform random walks
-            results = self.random_walk_with_restart(G)
-            
-            # Identify significant nodes
-            significant_nodes = self.identify_significant_nodes(results)
-            
-            # Calculate robustness
-            robustness = self.calculate_network_robustness(G)
-            
-            return {
-                'significant_nodes': significant_nodes,
-                'visit_frequencies': results['visit_frequencies'],
-                'convergence_rate': results['convergence_data'][-1] if results['convergence_data'] else 0,
-                'robustness': robustness,
-                'graph': G
-            }
-            
-        except Exception as e:
-            logger.error(f"Random walk analysis failed: {e}")
-            raise
-    
-    def _prepare_sample_edges(self) -> List[Tuple]:
-        """Prepare sample edge data for testing."""
-        return [
-            ('p53', 'apoptosis', 0.9),
-            ('NFkB', 'apoptosis', 0.7),
-            ('ATM', 'p53', 0.85),
-            ('AKT', 'p53', 0.75),
-            ('EGFR', 'AKT', 0.8)
-        ]
-    
-    def _prepare_sample_mutations(self) -> Dict[str, float]:
-        """Prepare sample mutation data for testing."""
-        return {
-            'p53': 0.85, 'NFkB': 0.45, 'ATM': 0.25,
-            'AKT': 0.35, 'EGFR': 0.30, 'apoptosis': 0.10
-        }
+    plt.figure(figsize=(12, 6))
+    plt.hist(edge_weights, bins=20, color='lightcoral', edgecolor='black')
+    plt.xlabel('Edge Weight', fontsize=12)
+    plt.ylabel('Frequency', fontsize=12)
+    plt.title('Distribution of Edge Weights', fontsize=14)
+    plt.tight_layout()
+    plt.savefig('edge_weights_distribution.png')
+    plt.show()
+
+# Function to plot community sizes
+def plot_community_sizes(G):
+    communities = community.greedy_modularity_communities(G)
+    community_sizes = [len(comm) for comm in communities]
+
+    plt.figure(figsize=(12, 6))
+    plt.bar(range(len(community_sizes)), community_sizes, color='mediumseagreen')
+    plt.xlabel('Community Index', fontsize=12)
+    plt.ylabel('Community Size', fontsize=12)
+    plt.title('Sizes of Detected Communities', fontsize=14)
+    plt.tight_layout()
+    plt.savefig('community_sizes.png')
+    plt.show()
+
+# Run all plots
+plot_convergence_rate(convergence_data)
+plot_biological_network(G, total_visiting_counts)
+plot_visit_counts(total_visiting_counts)
+plot_edge_weights_distribution(G)
+plot_community_sizes(G)
