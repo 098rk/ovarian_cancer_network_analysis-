@@ -116,7 +116,7 @@ node_states = {node: rd.choice([0, 1]) for node in G.nodes}
 
 for t in range(time_steps):
     states[t] = node_states.copy()
-    
+
     for node in G.nodes:
         inputs = list(G.predecessors(node))
         total_input = sum(node_states[input_node] * G[input_node][node]['weight'] for input_node in inputs)
@@ -137,14 +137,17 @@ for t in range(time_steps):
     plt.tight_layout()
     plt.show()
 
-# Identify pivotal nodes
+
+# Identify pivotal nodes - CORRECTED FUNCTION
 def identify_pivotal_nodes(G):
     pivotal_nodes = []
     for node in G.nodes:
-        total_input = sum(G.predecessors(node), key=lambda x: G[x][node]['weight'])
+        # Calculate total input weight by summing weights of all incoming edges
+        total_input = sum(G[u][node]['weight'] for u in G.predecessors(node))
         if total_input > 0:
             pivotal_nodes.append(node)
     return pivotal_nodes
+
 
 pivotal_nodes = identify_pivotal_nodes(G)
 print("Pivotal nodes:", pivotal_nodes)
