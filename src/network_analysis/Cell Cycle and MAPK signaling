@@ -1,4 +1,3 @@
-
 import networkx as nx
 import matplotlib.pyplot as plt
 import numpy as np
@@ -45,7 +44,7 @@ mapk_edges = [
     ('Ras', 'NF-kB')
 ]
 
-# Create unorganized networks
+# Create unorganized networks as DIRECTED GRAPHS
 G_cell_cycle_unorganized = nx.DiGraph()
 G_mapk_unorganized = nx.DiGraph()
 
@@ -55,14 +54,14 @@ G_mapk_unorganized.add_edges_from(mapk_edges)
 
 # Plot Cell Cycle Pathway separately (With Edges)
 plt.figure(figsize=(10, 8))
-pos_cell_cycle = nx.spring_layout(G_cell_cycle_unorganized, seed=42, k=1.5)  # Increase k for better node separation
+pos_cell_cycle = nx.spring_layout(G_cell_cycle_unorganized, seed=42, k=1.5)
 nx.draw(G_cell_cycle_unorganized, pos=pos_cell_cycle, with_labels=True, node_color='lightblue', edge_color='gray', node_size=2500, font_size=12, font_weight='bold', arrows=True)
 plt.title("Unorganized Cell Cycle Pathway (With Edges)", fontsize=14)
 plt.show()
 
 # Plot MAPK Signaling Pathway separately (With Edges)
 plt.figure(figsize=(10, 8))
-pos_mapk = nx.spring_layout(G_mapk_unorganized, seed=42, k=1.5)  # Increase k for better node separation
+pos_mapk = nx.spring_layout(G_mapk_unorganized, seed=42, k=1.5)
 nx.draw(G_mapk_unorganized, pos=pos_mapk, with_labels=True, node_color='lightgreen', edge_color='gray', node_size=2500, font_size=12, font_weight='bold', arrows=True)
 plt.title("Unorganized MAPK Signaling Pathway (With Edges)", fontsize=14)
 plt.show()
@@ -81,25 +80,25 @@ mapk_nodes = [
     'p70S6K', 'CREB', 'ELK1', 'JNK', 'c-Jun', 'p38', 'ATF2', 'NF-kB'
 ]
 
-# Create unorganized networks with only nodes
-G_cell_cycle_unorganized = nx.Graph()
-G_mapk_unorganized = nx.Graph()
+# Create unorganized networks with only nodes (as DiGraph for consistency)
+G_cell_cycle_nodes_only = nx.DiGraph()
+G_mapk_nodes_only = nx.DiGraph()
 
 # Add nodes to the unorganized networks
-G_cell_cycle_unorganized.add_nodes_from(cell_cycle_nodes)
-G_mapk_unorganized.add_nodes_from(mapk_nodes)
+G_cell_cycle_nodes_only.add_nodes_from(cell_cycle_nodes)
+G_mapk_nodes_only.add_nodes_from(mapk_nodes)
 
 # Plot Cell Cycle Pathway separately (Nodes Only)
 plt.figure(figsize=(8, 6))
-pos_cell_cycle = nx.spring_layout(G_cell_cycle_unorganized, seed=42)  # Ensure nodes are not overlapping
-nx.draw(G_cell_cycle_unorganized, pos=pos_cell_cycle, with_labels=True, node_color='lightblue', node_size=2000, font_size=10)
+pos_cell_cycle = nx.spring_layout(G_cell_cycle_nodes_only, seed=42)
+nx.draw(G_cell_cycle_nodes_only, pos=pos_cell_cycle, with_labels=True, node_color='lightblue', node_size=2000, font_size=10, arrows=False)
 plt.title("Unorganized Cell Cycle Pathway (Nodes Only)")
 plt.show()
 
 # Plot MAPK Signaling Pathway separately (Nodes Only)
 plt.figure(figsize=(8, 6))
-pos_mapk = nx.spring_layout(G_mapk_unorganized, seed=42)  # Ensure nodes are not overlapping
-nx.draw(G_mapk_unorganized, pos=pos_mapk, with_labels=True, node_color='lightgreen', node_size=2000, font_size=10)
+pos_mapk = nx.spring_layout(G_mapk_nodes_only, seed=42)
+nx.draw(G_mapk_nodes_only, pos=pos_mapk, with_labels=True, node_color='lightgreen', node_size=2000, font_size=10, arrows=False)
 plt.title("Unorganized MAPK Signaling Pathway (Nodes Only)")
 plt.show()
 
@@ -110,7 +109,8 @@ def random_walk(G, start_node, num_steps):
 
     for _ in range(num_steps):
         visiting_counts[current_node] += 1
-        neighbors = list(G.neighbors(current_node))
+        # For directed graphs, use successors (outgoing edges)
+        neighbors = list(G.successors(current_node))
         if not neighbors:
             break
         current_node = np.random.choice(neighbors)
@@ -125,10 +125,6 @@ def boolean_model_simulation(G, timesteps=100):
             if np.random.rand() > 0.5:  # Random activation
                 activation_counts[node] += 1
     return activation_counts
-
-# Add edges to the networks for analysis
-G_cell_cycle_unorganized.add_edges_from(cell_cycle_edges)
-G_mapk_unorganized.add_edges_from(mapk_edges)
 
 # Perform Random Walks
 num_walks = 1000
@@ -168,37 +164,69 @@ mapk_pagerank = nx.pagerank(G_mapk_unorganized)
 cell_cycle_betweenness = nx.betweenness_centrality(G_cell_cycle_unorganized)
 mapk_betweenness = nx.betweenness_centrality(G_mapk_unorganized)
 
-# Motif Analysis
-cell_cycle_motifs = list(nx.triadic_census(G_cell_cycle_unorganized))
-mapk_motifs = list(nx.triadic_census(G_mapk_unorganized))
+# Motif Analysis - Now using directed graphs
+try:
+    cell_cycle_motifs = nx.triadic_census(G_cell_cycle_unorganized)
+    mapk_motifs = nx.triadic_census(G_mapk_unorganized)
+except Exception as e:
+    print(f"Motif analysis error: {e}")
+    # Alternative: Use a simple triangle count for undirected version
+    G_cell_cycle_undirected = G_cell_cycle_unorganized.to_undirected()
+    G_mapk_undirected = G_mapk_unorganized.to_undirected()
+    
+    cell_cycle_triangles = nx.triangles(G_cell_cycle_undirected)
+    mapk_triangles = nx.triangles(G_mapk_undirected)
+    
+    cell_cycle_motifs = f"Triangle counts: {sum(cell_cycle_triangles.values()) // 3}"
+    mapk_motifs = f"Triangle counts: {sum(mapk_triangles.values()) // 3}"
 
 # Print Results
 print("Cell Cycle Pathway - Random Walk Visit Counts:")
-print(total_visiting_counts_cell_cycle)
+for node, count in sorted(total_visiting_counts_cell_cycle.items(), key=lambda x: x[1], reverse=True):
+    print(f"  {node}: {count:.4f}")
 
-print("MAPK Pathway - Random Walk Visit Counts:")
-print(total_visiting_counts_mapk)
+print("\nMAPK Pathway - Random Walk Visit Counts:")
+for node, count in sorted(total_visiting_counts_mapk.items(), key=lambda x: x[1], reverse=True):
+    print(f"  {node}: {count:.4f}")
 
-print("Cell Cycle Pathway - Boolean Model Activation:")
-print(cell_cycle_boolean)
+print("\nCell Cycle Pathway - Boolean Model Activation:")
+for node, count in sorted(cell_cycle_boolean.items(), key=lambda x: x[1], reverse=True):
+    print(f"  {node}: {count}")
 
-print("MAPK Pathway - Boolean Model Activation:")
-print(mapk_boolean)
+print("\nMAPK Pathway - Boolean Model Activation:")
+for node, count in sorted(mapk_boolean.items(), key=lambda x: x[1], reverse=True):
+    print(f"  {node}: {count}")
 
-print("Cell Cycle Pathway - PageRank Scores:")
-print(cell_cycle_pagerank)
+print("\nCell Cycle Pathway - PageRank Scores:")
+for node, score in sorted(cell_cycle_pagerank.items(), key=lambda x: x[1], reverse=True):
+    print(f"  {node}: {score:.4f}")
 
-print("MAPK Pathway - PageRank Scores:")
-print(mapk_pagerank)
+print("\nMAPK Pathway - PageRank Scores:")
+for node, score in sorted(mapk_pagerank.items(), key=lambda x: x[1], reverse=True):
+    print(f"  {node}: {score:.4f}")
 
-print("Cell Cycle Pathway - Betweenness Centrality:")
-print(cell_cycle_betweenness)
+print("\nCell Cycle Pathway - Betweenness Centrality:")
+for node, centrality in sorted(cell_cycle_betweenness.items(), key=lambda x: x[1], reverse=True):
+    print(f"  {node}: {centrality:.4f}")
 
-print("MAPK Pathway - Betweenness Centrality:")
-print(mapk_betweenness)
+print("\nMAPK Pathway - Betweenness Centrality:")
+for node, centrality in sorted(mapk_betweenness.items(), key=lambda x: x[1], reverse=True):
+    print(f"  {node}: {centrality:.4f}")
 
-print("Cell Cycle Pathway - Triadic Motifs:")
+print("\nCell Cycle Pathway - Triadic Motifs:")
 print(cell_cycle_motifs)
 
-print("MAPK Pathway - Triadic Motifs:")
+print("\nMAPK Pathway - Triadic Motifs:")
 print(mapk_motifs)
+
+# Additional network statistics
+print("\n=== Network Statistics ===")
+print(f"Cell Cycle Network:")
+print(f"  Nodes: {G_cell_cycle_unorganized.number_of_nodes()}")
+print(f"  Edges: {G_cell_cycle_unorganized.number_of_edges()}")
+print(f"  Density: {nx.density(G_cell_cycle_unorganized):.4f}")
+
+print(f"\nMAPK Network:")
+print(f"  Nodes: {G_mapk_unorganized.number_of_nodes()}")
+print(f"  Edges: {G_mapk_unorganized.number_of_edges()}")
+print(f"  Density: {nx.density(G_mapk_unorganized):.4f}")
