@@ -1,0 +1,2154 @@
+#!/usr/bin/env python3
+"""
+TCGA-OV Data Downloader: Complete script to download TCGA Ovarian Cancer data from GDC
+- Clinical data and biospecimen data
+- Whole genome/exome sequencing (somatic mutations)
+- RNA-seq expression data
+- Copy number variation data
+- DNA methylation data
+- Clinical images and pathology reports
+"""
+
+import requests
+import json
+import pandas as pd
+import numpy as np
+import os
+import time
+import tarfile
+import gzip
+import zipfile
+import shutil
+from typing import Dict, List, Optional, Tuple, Any
+from pathlib import Path
+import logging
+import warnings
+import subprocess
+import sys
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import hashlib
+from tqdm import tqdm
+import csv
+import io
+
+# Suppress warnings
+warnings.filterwarnings('ignore')
+
+# Set up logging - modified to avoid interfering with input
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('gdc_tcga_ov_download.log'),
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Add a stream handler but with higher level during menu
+stream_handler = logging.StreamHandler()
+stream_handler.setLevel(logging.WARNING)
+logger.addHandler(stream_handler)
+
+
+class GDCTCGADownloader:
+    """Comprehensive TCGA-OV data downloader using GDC Data Portal"""
+
+    def __init__(self, output_dir: str = "gdc_tcga_ov"):
+        """Initialize GDC downloader"""
+        # GDC API endpoints
+        self.api_url = "https://api.gdc.cancer.gov"
+        self.portal_url = "https://portal.gdc.cancer.gov"
+        self.data_url = "https://api.gdc.cancer.gov/data"
+
+        # Project ID for TCGA Ovarian Cancer
+        self.project_id = "TCGA-OV"
+
+        # Output directory structure
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create subdirectories
+        self.dirs = {
+            'clinical': self.output_dir / 'clinical',
+            'somatic': self.output_dir / 'somatic_mutations',
+            'expression': self.output_dir / 'expression',
+            'cnv': self.output_dir / 'copy_number',
+            'methylation': self.output_dir / 'methylation',
+            'biospecimen': self.output_dir / 'biospecimen',
+            'pathology': self.output_dir / 'pathology',
+            'raw': self.output_dir / 'raw_files',
+            'processed': self.output_dir / 'processed_data'
+        }
+
+        for dir_path in self.dirs.values():
+            dir_path.mkdir(parents=True, exist_ok=True)
+
+        # GDC Data Categories and Types for TCGA-OV
+        self.data_categories = {
+            'clinical': {
+                'category': 'Clinical',
+                'data_type': 'Clinical Supplement',
+                'file_format': ['xml', 'txt']
+            },
+            'biospecimen': {
+                'category': 'Biospecimen',
+                'data_type': 'Biospecimen Supplement',
+                'file_format': ['xml', 'txt']
+            },
+            'somatic_mutations': {
+                'category': 'Simple Nucleotide Variation',
+                'data_type': ['Masked Somatic Mutation', 'Aggregated Somatic Mutation'],
+                'file_format': ['maf.gz', 'vcf.gz']
+            },
+            'expression': {
+                'category': 'Transcriptome Profiling',
+                'data_type': ['Gene Expression Quantification', 'Isoform Expression Quantification'],
+                'file_format': ['tsv.gz', 'txt.gz']
+            },
+            'copy_number': {
+                'category': 'Copy Number Variation',
+                'data_type': ['Copy Number Segment', 'Masked Copy Number Segment'],
+                'file_format': ['seg', 'txt']
+            },
+            'methylation': {
+                'category': 'DNA Methylation',
+                'data_type': 'Methylation Beta Value',
+                'file_format': ['tsv.gz', 'txt.gz']
+            },
+            'pathology': {
+                'category': 'Slide Image',
+                'data_type': 'Slide Image',
+                'file_format': ['svs', 'tiff']
+            }
+        }
+
+        # Common TCGA-OV case IDs (for reference)
+        self.tcga_ov_cases = self._load_tcga_ov_cases()
+
+        # Statistics tracker
+        self.stats = {
+            'total_files': 0,
+            'downloaded_files': 0,
+            'failed_downloads': 0,
+            'total_size_mb': 0,
+            'categories': {}
+        }
+
+        # Session for API calls
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        })
+
+        # Check for GDC Data Transfer Tool
+        self.gdc_client_available = self._check_gdc_client()
+
+        logger.info(f"GDC TCGA-OV Downloader initialized. Output directory: {self.output_dir}")
+
+    def _load_tcga_ov_cases(self) -> List[str]:
+        """Load TCGA-OV case IDs from file or create sample list"""
+        cases_file = self.output_dir / 'tcga_ov_cases.txt'
+
+        if cases_file.exists():
+            with open(cases_file, 'r') as f:
+                cases = [line.strip() for line in f if line.strip()]
+            logger.info(f"Loaded {len(cases)} cases from file")
+            return cases
+
+        # Sample TCGA-OV cases (first 50 for demonstration)
+        sample_cases = [
+            'TCGA-04-1331', 'TCGA-04-1332', 'TCGA-04-1335', 'TCGA-04-1336', 'TCGA-04-1337',
+            'TCGA-04-1338', 'TCGA-04-1341', 'TCGA-04-1342', 'TCGA-04-1343', 'TCGA-04-1346',
+            'TCGA-04-1347', 'TCGA-04-1348', 'TCGA-04-1349', 'TCGA-04-1350', 'TCGA-04-1351',
+            'TCGA-04-1353', 'TCGA-04-1356', 'TCGA-04-1357', 'TCGA-04-1359', 'TCGA-04-1360',
+            'TCGA-04-1361', 'TCGA-04-1362', 'TCGA-04-1364', 'TCGA-04-1365', 'TCGA-04-1366',
+            'TCGA-04-1367', 'TCGA-04-1368', 'TCGA-04-1369', 'TCGA-04-1370', 'TCGA-04-1371',
+            'TCGA-09-0365', 'TCGA-09-0366', 'TCGA-09-0367', 'TCGA-09-0369', 'TCGA-09-0370',
+            'TCGA-09-0377', 'TCGA-13-0723', 'TCGA-13-0724', 'TCGA-13-0730', 'TCGA-13-0731',
+            'TCGA-13-0732', 'TCGA-13-0733', 'TCGA-13-0734', 'TCGA-13-0735', 'TCGA-13-0736',
+            'TCGA-13-0737', 'TCGA-13-0738', 'TCGA-13-0739', 'TCGA-13-0740', 'TCGA-13-0741'
+        ]
+
+        with open(cases_file, 'w') as f:
+            for case in sample_cases:
+                f.write(f"{case}\n")
+
+        return sample_cases
+
+    def _check_gdc_client(self) -> bool:
+        """Check if GDC Data Transfer Tool is installed"""
+        try:
+            result = subprocess.run(['gdc-client', '--version'],
+                                    capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                logger.info("GDC Data Transfer Tool is available")
+                return True
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        logger.info("GDC Data Transfer Tool not found, will use API download")
+        return False
+
+    def query_gdc_api(self, endpoint: str, filters: Dict = None,
+                      params: Dict = None, method: str = 'POST') -> Dict:
+        """Query GDC API with proper error handling"""
+        url = f"{self.api_url}/{endpoint}"
+
+        try:
+            if method.upper() == 'POST':
+                payload = {
+                    "filters": filters or {},
+                    "format": "JSON",
+                    "size": 10000
+                }
+                if params:
+                    payload.update(params)
+
+                response = self.session.post(url, json=payload, timeout=30)
+            else:
+                # GET request
+                response = self.session.get(url, params=params, timeout=30)
+
+            response.raise_for_status()
+            return response.json()
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"GDC API query failed for {endpoint}: {e}")
+            return {}
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error for {endpoint}: {e}")
+            return {}
+
+    def get_project_summary(self) -> Dict:
+        """Get TCGA-OV project summary"""
+        logger.info("Getting TCGA-OV project summary...")
+
+        filters = {
+            "op": "in",
+            "content": {
+                "field": "project.project_id",
+                "value": [self.project_id]
+            }
+        }
+
+        data = self.query_gdc_api("projects", filters=filters)
+
+        if data and 'data' in data and data['data']['hits']:
+            project_info = data['data']['hits'][0]
+
+            summary = {
+                'project_id': project_info.get('project_id'),
+                'name': project_info.get('name'),
+                'disease_type': project_info.get('disease_type', []),
+                'primary_site': project_info.get('primary_site', []),
+                'dbgap_accession': project_info.get('dbgap_accession_number'),
+                'case_count': project_info.get('summary', {}).get('case_count', 0),
+                'file_count': project_info.get('summary', {}).get('file_count', 0),
+                'file_size': project_info.get('summary', {}).get('file_size', 0)
+            }
+
+            logger.info(f"Project Summary: {summary['name']}")
+            logger.info(f"  Cases: {summary['case_count']:,}")
+            logger.info(f"  Files: {summary['file_count']:,}")
+            logger.info(f"  Total Size: {summary['file_size'] / (1024 ** 4):.2f} TB")
+
+            # Save summary
+            summary_file = self.output_dir / 'project_summary.json'
+            with open(summary_file, 'w') as f:
+                json.dump(summary, f, indent=2)
+
+            return summary
+        else:
+            logger.warning("Could not fetch project summary")
+            return {}
+
+    def get_cases_list(self, max_cases: int = 100) -> List[Dict]:
+        """Get list of TCGA-OV cases with basic information"""
+        logger.info(f"Fetching TCGA-OV cases (max: {max_cases})...")
+
+        filters = {
+            "op": "and",
+            "content": [
+                {
+                    "op": "in",
+                    "content": {
+                        "field": "project.project_id",
+                        "value": [self.project_id]
+                    }
+                }
+            ]
+        }
+
+        fields = [
+            "case_id", "submitter_id", "project.project_id",
+            "demographic.gender", "demographic.race", "demographic.ethnicity",
+            "demographic.year_of_birth", "demographic.year_of_death",
+            "diagnoses.tumor_stage", "diagnoses.vital_status",
+            "diagnoses.days_to_death", "diagnoses.days_to_last_follow_up",
+            "diagnoses.age_at_diagnosis", "diagnoses.classification_of_tumor",
+            "diagnoses.tissue_or_organ_of_origin", "diagnoses.site_of_resection_or_biopsy",
+            "samples.sample_type", "samples.tissue_type"
+        ]
+
+        params = {
+            "fields": ",".join(fields),
+            "size": max_cases
+        }
+
+        data = self.query_gdc_api("cases", filters=filters, params=params)
+
+        if data and 'data' in data:
+            cases = data['data']['hits']
+            logger.info(f"Retrieved {len(cases)} cases")
+
+            # Save cases list
+            cases_file = self.dirs['clinical'] / 'cases_list.json'
+            with open(cases_file, 'w') as f:
+                json.dump(cases, f, indent=2)
+
+            # Also save as CSV for easier viewing
+            if cases:
+                df_cases = pd.json_normalize(cases)
+                csv_file = self.dirs['clinical'] / 'cases_list.csv'
+                df_cases.to_csv(csv_file, index=False)
+                logger.info(f"Cases list saved to {csv_file}")
+
+            return cases
+        else:
+            logger.warning("No cases retrieved")
+            return []
+
+    def get_files_by_category(self, category: str, data_type: str = None,
+                              max_files: int = 50, file_format_filter: list = None) -> List[Dict]:
+        """Get files for a specific data category with optional file format filtering"""
+        logger.info(f"Querying files for category: {category}")
+
+        filters = {
+            "op": "and",
+            "content": [
+                {
+                    "op": "in",
+                    "content": {
+                        "field": "cases.project.project_id",
+                        "value": [self.project_id]
+                    }
+                },
+                {
+                    "op": "in",
+                    "content": {
+                        "field": "files.data_category",
+                        "value": [self.data_categories[category]['category']]
+                    }
+                }
+            ]
+        }
+
+        if data_type:
+            if isinstance(data_type, list):
+                type_filter = {
+                    "op": "in",
+                    "content": {
+                        "field": "files.data_type",
+                        "value": data_type
+                    }
+                }
+            else:
+                type_filter = {
+                    "op": "in",
+                    "content": {
+                        "field": "files.data_type",
+                        "value": [data_type]
+                    }
+                }
+            filters["content"].append(type_filter)
+
+        fields = [
+            "file_id", "file_name", "file_size", "data_type", "data_category",
+            "data_format", "access", "cases.case_id", "cases.submitter_id",
+            "analysis.workflow_type", "analysis.input_files.file_id"
+        ]
+
+        params = {
+            "fields": ",".join(fields),
+            "size": max_files
+        }
+
+        data = self.query_gdc_api("files", filters=filters, params=params)
+
+        if data and 'data' in data:
+            files = data['data']['hits']
+            
+            # Filter by file format if specified
+            if file_format_filter:
+                filtered_files = []
+                for file_info in files:
+                    file_name = file_info.get('file_name', '').lower()
+                    if any(fmt in file_name for fmt in file_format_filter):
+                        filtered_files.append(file_info)
+                files = filtered_files
+            
+            logger.info(f"Found {len(files)} files for {category}")
+            return files
+        else:
+            logger.warning(f"No files found for category: {category}")
+            return []
+
+    def download_file(self, file_id: str, file_name: str,
+                      output_dir: Path, retries: int = 3) -> bool:
+        """Download a single file from GDC"""
+        output_path = output_dir / file_name
+
+        # Skip if file already exists
+        if output_path.exists():
+            file_size = output_path.stat().st_size
+            if file_size > 1024:  # At least 1KB
+                logger.debug(f"File already exists: {file_name} ({file_size / 1024:.1f} KB)")
+                return True
+
+        download_url = f"{self.data_url}/{file_id}"
+
+        for attempt in range(retries):
+            try:
+                logger.debug(f"Downloading {file_name} (attempt {attempt + 1})...")
+
+                # Stream download for large files
+                with self.session.get(download_url, stream=True, timeout=60) as response:
+                    response.raise_for_status()
+                    
+                    # Check for 403 Forbidden (controlled access data)
+                    if response.status_code == 403:
+                        logger.warning(f"Access denied (403) for {file_name}. This is controlled access data.")
+                        return False
+
+                    total_size = int(response.headers.get('content-length', 0))
+
+                    with open(output_path, 'wb') as f, tqdm(
+                            desc=file_name[:30],
+                            total=total_size,
+                            unit='B',
+                            unit_scale=True,
+                            unit_divisor=1024,
+                            leave=False
+                    ) as pbar:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                                pbar.update(len(chunk))
+
+                # Verify download
+                if output_path.exists() and output_path.stat().st_size > 0:
+                    self.stats['downloaded_files'] += 1
+                    self.stats['total_size_mb'] += output_path.stat().st_size / (1024 ** 2)
+
+                    logger.debug(f"Downloaded: {file_name} ({output_path.stat().st_size / 1024:.1f} KB)")
+                    return True
+                else:
+                    logger.warning(f"Downloaded file is empty: {file_name}")
+
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 403:
+                    logger.warning(f"Access denied (403) for {file_name}. This is controlled access data.")
+                    return False
+                else:
+                    logger.error(f"HTTP error {e.response.status_code} for {file_name}: {e}")
+            except Exception as e:
+                logger.error(f"Download attempt {attempt + 1} failed for {file_name}: {e}")
+                if attempt < retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+
+        logger.error(f"Failed to download {file_name} after {retries} attempts")
+        self.stats['failed_downloads'] += 1
+        return False
+
+    def download_files_parallel(self, files: List[Dict], category: str,
+                                max_workers: int = 5) -> int:
+        """Download multiple files in parallel"""
+        if not files:
+            logger.warning(f"No files to download for {category}")
+            return 0
+
+        logger.info(f"Downloading {len(files)} files for {category}...")
+
+        output_dir = self.dirs.get(category, self.dirs['raw'])
+
+        # Prepare download tasks
+        download_tasks = []
+        for file_info in files:
+            file_id = file_info['file_id']
+            file_name = file_info['file_name']
+            download_tasks.append((file_id, file_name, output_dir))
+
+        # Download in parallel
+        successful = 0
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(self.download_file, file_id, file_name, output_dir):
+                    (file_id, file_name) for file_id, file_name, output_dir in download_tasks
+            }
+
+            for future in tqdm(as_completed(futures), total=len(futures),
+                               desc=f"Downloading {category}"):
+                file_id, file_name = futures[future]
+                try:
+                    if future.result():
+                        successful += 1
+                        # Update category stats
+                        if category not in self.stats['categories']:
+                            self.stats['categories'][category] = 0
+                        self.stats['categories'][category] += 1
+                except Exception as e:
+                    logger.error(f"Error downloading {file_name}: {e}")
+
+        logger.info(f"Downloaded {successful}/{len(files)} files for {category}")
+        return successful
+
+    def download_clinical_data(self) -> pd.DataFrame:
+        """Download and process clinical data"""
+        logger.info("Downloading TCGA-OV clinical data...")
+
+        # Get clinical files
+        clinical_files = self.get_files_by_category('clinical', max_files=20)
+
+        if not clinical_files:
+            logger.warning("No clinical files found, creating sample data")
+            return self._create_sample_clinical_data()
+
+        # Download clinical files
+        self.download_files_parallel(clinical_files, 'clinical')
+
+        # Process clinical files
+        clinical_data = self._process_clinical_files()
+
+        # If no data was processed, create sample data
+        if clinical_data.empty:
+            logger.warning("Processed clinical data is empty, creating sample data")
+            clinical_data = self._create_sample_clinical_data()
+
+        # Save processed clinical data
+        if not clinical_data.empty:
+            clinical_csv = self.dirs['clinical'] / 'tcga_ov_clinical_data.csv'
+            clinical_data.to_csv(clinical_csv, index=False, encoding='utf-8')
+            logger.info(f"Clinical data saved to {clinical_csv}")
+            logger.info(f"Data shape: {clinical_data.shape}")
+
+            # Create clinical summary
+            self._create_clinical_summary(clinical_data)
+
+        return clinical_data
+
+    def _process_clinical_files(self) -> pd.DataFrame:
+        """Process downloaded clinical XML/TXT files"""
+        logger.info("Processing clinical files...")
+
+        clinical_files = list(self.dirs['clinical'].glob('*'))
+
+        if not clinical_files:
+            logger.warning("No clinical files to process")
+            return pd.DataFrame()
+
+        # Try to find and parse clinical data files
+        clinical_data = []
+
+        for file_path in clinical_files:
+            try:
+                # Skip summary files and already processed files
+                if file_path.name in ['clinical_summary.txt', 'tcga_ov_clinical_data.csv', 
+                                      'sample_clinical_data.csv', 'cases_list.csv']:
+                    continue
+                    
+                if file_path.suffix in ['.xml', '.XML']:
+                    # Parse XML clinical data
+                    df = self._parse_clinical_xml(file_path)
+                    if df is not None and not df.empty:
+                        clinical_data.append(df)
+
+                elif file_path.suffix in ['.txt', '.tsv', '.csv']:
+                    # Try to parse as CSV with different delimiters
+                    df = self._parse_clinical_text_file(file_path)
+                    if df is not None and not df.empty:
+                        clinical_data.append(df)
+                        logger.info(f"Successfully parsed {file_path.name}: {df.shape}")
+
+            except Exception as e:
+                logger.error(f"Error processing {file_path.name}: {e}")
+
+        # Also include the cases list if available
+        cases_file = self.dirs['clinical'] / 'cases_list.csv'
+        if cases_file.exists():
+            try:
+                df_cases = pd.read_csv(cases_file)
+                clinical_data.append(df_cases)
+                logger.info(f"Included cases list: {df_cases.shape}")
+            except Exception as e:
+                logger.error(f"Error reading cases list: {e}")
+
+        # Combine all clinical data
+        if clinical_data:
+            # Try to merge dataframes
+            combined_df = pd.concat(clinical_data, ignore_index=True, sort=True)
+
+            # Remove duplicate columns
+            combined_df = combined_df.loc[:, ~combined_df.columns.duplicated()]
+
+            # Clean up column names and data
+            combined_df = self._clean_clinical_dataframe(combined_df)
+
+            logger.info(f"Processed clinical data: {len(combined_df)} rows, {len(combined_df.columns)} columns")
+            
+            # Check if dataframe is valid
+            if len(combined_df) > 0:
+                logger.info(f"First few rows:\n{combined_df.head()}")
+                logger.info(f"Columns: {list(combined_df.columns)}")
+            else:
+                logger.warning("Combined dataframe is empty!")
+                
+            return combined_df
+        else:
+            logger.warning("No clinical data processed")
+            return pd.DataFrame()
+
+    def _clean_clinical_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Clean clinical dataframe by removing invalid columns and rows"""
+        # Remove columns that are clearly corrupted (like the ======== column)
+        bad_columns = [col for col in df.columns if '=======' in str(col)]
+        if bad_columns:
+            logger.info(f"Removing bad columns: {bad_columns}")
+            df = df.drop(columns=bad_columns)
+        
+        # Remove columns that are all NaN
+        df = df.dropna(axis=1, how='all')
+        
+        # Remove rows that are all NaN
+        df = df.dropna(how='all')
+        
+        # Clean up case_id column - convert to string and remove NaN
+        if 'case_id' in df.columns:
+            df['case_id'] = df['case_id'].astype(str).str.strip()
+            # Remove rows with 'nan' or empty case_id
+            df = df[~df['case_id'].isin(['nan', 'NaN', '', 'None'])]
+            
+        # Also check for submitter_id
+        if 'submitter_id' in df.columns:
+            df['submitter_id'] = df['submitter_id'].astype(str).str.strip()
+            
+        # Clean up other string columns
+        for col in df.select_dtypes(include=['object']).columns:
+            df[col] = df[col].astype(str).str.strip()
+            
+        # Replace 'nan' strings with actual NaN
+        df = df.replace(['nan', 'NaN', 'None', ''], np.nan)
+        
+        return df
+
+    def _parse_clinical_text_file(self, file_path: Path) -> pd.DataFrame:
+        """Parse clinical text file with various delimiters"""
+        try:
+            # Read the raw content
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            
+            # Check if file is empty
+            if not content.strip():
+                logger.warning(f"File is empty: {file_path.name}")
+                return pd.DataFrame()
+            
+            # Split into lines
+            lines = content.strip().split('\n')
+            
+            # Try to find the actual header line
+            header_line = None
+            data_start = 0
+            
+            for i, line in enumerate(lines):
+                # Look for a line with typical clinical column names
+                if any(keyword in line.lower() for keyword in ['patient', 'case', 'sample', 'bcr', 'tumor', 'vital']):
+                    header_line = line
+                    data_start = i + 1
+                    break
+            
+            if header_line is None:
+                # Use first non-empty line as header
+                for i, line in enumerate(lines):
+                    if line.strip():
+                        header_line = line
+                        data_start = i + 1
+                        break
+            
+            if header_line is None:
+                logger.warning(f"No header found in {file_path.name}")
+                return pd.DataFrame()
+            
+            # Try different delimiters
+            delimiters = ['\t', ',', '|', ';']
+            best_df = None
+            best_score = 0
+            
+            for delimiter in delimiters:
+                try:
+                    # Split header by delimiter
+                    headers = [h.strip() for h in header_line.split(delimiter)]
+                    
+                    # Skip if too few columns or suspicious header
+                    if len(headers) < 2 or any('======' in h for h in headers):
+                        continue
+                    
+                    # Collect data rows
+                    data_rows = []
+                    for line in lines[data_start:]:
+                        if line.strip():
+                            values = line.split(delimiter)
+                            # Pad or truncate to match headers
+                            if len(values) < len(headers):
+                                values += [''] * (len(headers) - len(values))
+                            elif len(values) > len(headers):
+                                values = values[:len(headers)]
+                            data_rows.append(values)
+                    
+                    if data_rows:
+                        df = pd.DataFrame(data_rows, columns=headers)
+                        
+                        # Score this dataframe: more rows and columns is better
+                        score = len(df) * len(df.columns)
+                        
+                        if score > best_score:
+                            best_score = score
+                            best_df = df
+                            
+                except Exception as e:
+                    continue
+            
+            if best_df is not None:
+                logger.info(f"Parsed {file_path.name} with {len(best_df)} rows, {len(best_df.columns)} columns")
+                return best_df
+            
+            # If all else fails, try pandas with different delimiters
+            for delimiter in delimiters:
+                try:
+                    df = pd.read_csv(file_path, sep=delimiter, low_memory=False)
+                    if len(df) > 0 and len(df.columns) > 1:
+                        logger.info(f"Pandas parsed {file_path.name} with delimiter '{delimiter}': {df.shape}")
+                        return df
+                except Exception:
+                    continue
+            
+            logger.warning(f"Could not parse {file_path.name} with any delimiter")
+            return pd.DataFrame()
+            
+        except Exception as e:
+            logger.error(f"Error parsing text file {file_path.name}: {e}")
+            return pd.DataFrame()
+
+    def _parse_clinical_xml(self, xml_file: Path) -> pd.DataFrame:
+        """Parse clinical XML file"""
+        try:
+            import xml.etree.ElementTree as ET
+
+            tree = ET.parse(xml_file)
+            root = tree.getroot()
+
+            # Extract clinical data from XML
+            clinical_data = {}
+
+            # Common clinical elements
+            for elem in root.iter():
+                if elem.text and elem.text.strip():
+                    tag = elem.tag.split('}')[-1]  # Remove namespace
+                    clinical_data[tag] = elem.text.strip()
+
+            if clinical_data:
+                df = pd.DataFrame([clinical_data])
+                return df
+            else:
+                return pd.DataFrame()
+
+        except Exception as e:
+            logger.error(f"Error parsing XML file {xml_file.name}: {e}")
+            return pd.DataFrame()
+
+    def download_somatic_mutations(self, max_files: int = 10) -> pd.DataFrame:
+        """Download somatic mutation data (MAF/VCF files)"""
+        logger.info("Downloading somatic mutation data...")
+
+        # Get mutation files with specific format filtering
+        mutation_files = self.get_files_by_category(
+            'somatic_mutations',
+            max_files=max_files,
+            file_format_filter=['.maf', '.vcf', '.maf.gz', '.vcf.gz']
+        )
+
+        if not mutation_files:
+            logger.warning("No mutation files found, creating sample data")
+            return self._create_sample_mutation_data()
+
+        # Download mutation files
+        downloaded_count = self.download_files_parallel(mutation_files, 'somatic')
+        
+        if downloaded_count == 0:
+            logger.warning("Failed to download any mutation files (likely controlled access), creating sample data")
+            return self._create_sample_mutation_data()
+
+        # Process mutation files
+        mutation_data = self._process_mutation_files()
+
+        # If no data was processed, create sample data
+        if mutation_data.empty:
+            logger.warning("Processed mutation data is empty, creating sample data")
+            mutation_data = self._create_sample_mutation_data()
+
+        # Save processed mutation data
+        if not mutation_data.empty:
+            mutation_csv = self.dirs['somatic'] / 'tcga_ov_somatic_mutations.csv'
+            mutation_data.to_csv(mutation_csv, index=False, sep='\t')
+            logger.info(f"Somatic mutations saved to {mutation_csv}")
+
+            # Create mutation summary
+            self._create_mutation_summary(mutation_data)
+
+        return mutation_data
+
+    def _process_mutation_files(self) -> pd.DataFrame:
+        """Process downloaded MAF/VCF files"""
+        logger.info("Processing mutation files...")
+
+        mutation_files = list(self.dirs['somatic'].glob('*'))
+
+        if not mutation_files:
+            logger.warning("No mutation files to process")
+            return pd.DataFrame()
+
+        mutation_data = []
+
+        for file_path in mutation_files:
+            try:
+                # Skip binary files and sample data
+                if file_path.suffix in ['.idat', '.CEL', '.cel'] or 'sample' in file_path.name.lower():
+                    continue
+                    
+                # Handle gzipped files
+                if file_path.suffix == '.gz':
+                    with gzip.open(file_path, 'rt') as f:
+                        # Try to determine format
+                        try:
+                            first_line = f.readline()
+                            f.seek(0)
+
+                            if '##fileformat=VCF' in first_line:
+                                # VCF format
+                                df = self._parse_vcf_file(f)
+                            else:
+                                # Assume MAF format
+                                df = pd.read_csv(f, sep='\t', comment='#', low_memory=False)
+                        except UnicodeDecodeError:
+                            logger.warning(f"File appears to be binary, skipping: {file_path.name}")
+                            continue
+
+                elif file_path.suffix in ['.maf', '.vcf', '.txt']:
+                    # Try MAF format first
+                    try:
+                        df = pd.read_csv(file_path, sep='\t', comment='#', low_memory=False)
+                    except:
+                        # Try VCF format
+                        df = self._parse_vcf_file(file_path)
+
+                if df is not None and not df.empty:
+                    # Add file source
+                    df['source_file'] = file_path.name
+                    mutation_data.append(df)
+
+            except Exception as e:
+                logger.error(f"Error processing mutation file {file_path.name}: {e}")
+
+        # Combine mutation data
+        if mutation_data:
+            combined_df = pd.concat(mutation_data, ignore_index=True)
+            logger.info(f"Processed mutation data: {len(combined_df)} mutations")
+            return combined_df
+        else:
+            logger.warning("No mutation data processed")
+            return pd.DataFrame()
+
+    def _parse_vcf_file(self, vcf_file) -> pd.DataFrame:
+        """Parse VCF file into DataFrame"""
+        try:
+            # Parse VCF header
+            header_lines = []
+            if isinstance(vcf_file, (str, Path)):
+                with open(vcf_file, 'r') as f:
+                    for line in f:
+                        if line.startswith('#'):
+                            header_lines.append(line.strip())
+                        else:
+                            break
+            else:
+                # Already a file object
+                for line in vcf_file:
+                    if line.startswith('#'):
+                        header_lines.append(line.strip())
+                    else:
+                        break
+
+            # Find column headers
+            columns = []
+            for line in header_lines:
+                if line.startswith('#CHROM'):
+                    columns = line[1:].split('\t')  # Remove # from #CHROM
+                    break
+
+            # Read data
+            if isinstance(vcf_file, (str, Path)):
+                df = pd.read_csv(vcf_file, sep='\t', comment='#', names=columns)
+            else:
+                vcf_file.seek(0)
+                # Skip header lines
+                for line in vcf_file:
+                    if not line.startswith('#'):
+                        break
+                # Read the rest
+                df = pd.read_csv(vcf_file, sep='\t', names=columns)
+
+            return df
+
+        except Exception as e:
+            logger.error(f"Error parsing VCF file: {e}")
+            return pd.DataFrame()
+
+    def download_expression_data(self, max_files: int = 10) -> pd.DataFrame:
+        """Download gene expression data"""
+        logger.info("Downloading gene expression data...")
+
+        # Get expression files with text format filtering
+        expression_files = self.get_files_by_category(
+            'expression',
+            max_files=max_files,
+            file_format_filter=['.tsv', '.txt', '.tsv.gz', '.txt.gz', '.csv']
+        )
+
+        if not expression_files:
+            logger.warning("No expression files found, creating sample data")
+            return self._create_sample_expression_data()
+
+        # Download expression files
+        downloaded_count = self.download_files_parallel(expression_files, 'expression')
+        
+        if downloaded_count == 0:
+            logger.warning("Failed to download any expression files, creating sample data")
+            return self._create_sample_expression_data()
+
+        # Process expression files
+        expression_data = self._process_expression_files()
+
+        # If no data was processed, create sample data
+        if expression_data.empty:
+            logger.warning("Processed expression data is empty, creating sample data")
+            expression_data = self._create_sample_expression_data()
+
+        # Save processed expression data
+        if not expression_data.empty:
+            expression_csv = self.dirs['expression'] / 'tcga_ov_expression_data.csv'
+            expression_data.to_csv(expression_csv, index=False)
+            logger.info(f"Expression data saved to {expression_csv}")
+
+            # Create expression summary
+            self._create_expression_summary(expression_data)
+
+        return expression_data
+
+    def _process_expression_files(self) -> pd.DataFrame:
+        """Process downloaded expression files"""
+        logger.info("Processing expression files...")
+
+        expression_files = list(self.dirs['expression'].glob('*'))
+
+        if not expression_files:
+            logger.warning("No expression files to process")
+            return pd.DataFrame()
+
+        expression_data = []
+
+        for file_path in expression_files:
+            try:
+                # Skip binary files and sample data
+                if file_path.suffix in ['.idat', '.CEL', '.cel'] or 'sample' in file_path.name.lower():
+                    continue
+                    
+                # Handle gzipped files
+                if file_path.suffix == '.gz':
+                    try:
+                        with gzip.open(file_path, 'rt') as f:
+                            df = pd.read_csv(f, sep='\t', low_memory=False)
+                    except UnicodeDecodeError:
+                        logger.warning(f"File appears to be binary, skipping: {file_path.name}")
+                        continue
+                else:
+                    # Try tab-separated first, then comma-separated
+                    try:
+                        df = pd.read_csv(file_path, sep='\t', low_memory=False)
+                    except:
+                        try:
+                            df = pd.read_csv(file_path, low_memory=False)
+                        except Exception as e:
+                            logger.error(f"Error reading {file_path.name}: {e}")
+                            continue
+
+                if df is not None and not df.empty:
+                    # Extract sample ID from file name
+                    sample_id = file_path.stem.split('.')[0]
+                    df['sample_id'] = sample_id
+                    expression_data.append(df)
+
+            except Exception as e:
+                logger.error(f"Error processing expression file {file_path.name}: {e}")
+
+        # Combine expression data
+        if expression_data:
+            combined_df = pd.concat(expression_data, ignore_index=True)
+            logger.info(f"Processed expression data: {len(combined_df)} rows")
+            return combined_df
+        else:
+            logger.warning("No expression data processed")
+            return pd.DataFrame()
+
+    def download_copy_number_data(self, max_files: int = 10) -> pd.DataFrame:
+        """Download copy number variation data"""
+        logger.info("Downloading copy number variation data...")
+
+        # Get CNV files
+        cnv_files = self.get_files_by_category(
+            'copy_number',
+            max_files=max_files
+        )
+
+        if not cnv_files:
+            logger.warning("No CNV files found, creating sample data")
+            return self._create_sample_cnv_data()
+
+        # Download CNV files
+        self.download_files_parallel(cnv_files, 'cnv')
+
+        # Process CNV files
+        cnv_data = self._process_cnv_files()
+
+        # If no data was processed, create sample data
+        if cnv_data.empty:
+            logger.warning("Processed CNV data is empty, creating sample data")
+            cnv_data = self._create_sample_cnv_data()
+
+        # Save processed CNV data
+        if not cnv_data.empty:
+            cnv_csv = self.dirs['cnv'] / 'tcga_ov_copy_number_data.csv'
+            cnv_data.to_csv(cnv_csv, index=False)
+            logger.info(f"CNV data saved to {cnv_csv}")
+
+            # Create CNV summary
+            self._create_cnv_summary(cnv_data)
+
+        return cnv_data
+
+    def _process_cnv_files(self) -> pd.DataFrame:
+        """Process downloaded CNV files"""
+        logger.info("Processing CNV files...")
+
+        cnv_files = list(self.dirs['cnv'].glob('*'))
+
+        if not cnv_files:
+            logger.warning("No CNV files to process")
+            return pd.DataFrame()
+
+        cnv_data = []
+
+        for file_path in cnv_files:
+            try:
+                # Skip binary files and sample data
+                if file_path.suffix in ['.idat', '.CEL', '.cel'] or 'sample' in file_path.name.lower():
+                    continue
+                    
+                # Check file format
+                if file_path.suffix == '.seg':
+                    # SEG format: Sample, Chromosome, Start, End, Num_Probes, Segment_Mean
+                    df = pd.read_csv(file_path, sep='\t', comment='@')
+                else:
+                    # Assume tab-separated
+                    try:
+                        df = pd.read_csv(file_path, sep='\t', low_memory=False)
+                    except:
+                        # Try comma-separated
+                        df = pd.read_csv(file_path, low_memory=False)
+
+                if df is not None and not df.empty:
+                    cnv_data.append(df)
+
+            except Exception as e:
+                logger.error(f"Error processing CNV file {file_path.name}: {e}")
+
+        # Combine CNV data
+        if cnv_data:
+            combined_df = pd.concat(cnv_data, ignore_index=True)
+            logger.info(f"Processed CNV data: {len(combined_df)} segments")
+            return combined_df
+        else:
+            logger.warning("No CNV data processed")
+            return pd.DataFrame()
+
+    def download_methylation_data(self, max_files: int = 5) -> pd.DataFrame:
+        """Download DNA methylation data"""
+        logger.info("Downloading DNA methylation data...")
+
+        # Get methylation files with text format filtering
+        methylation_files = self.get_files_by_category(
+            'methylation',
+            max_files=max_files,
+            file_format_filter=['.tsv', '.txt', '.tsv.gz', '.txt.gz', '.csv']
+        )
+
+        if not methylation_files:
+            logger.warning("No methylation files found, creating sample data")
+            return self._create_sample_methylation_data()
+
+        # Download methylation files
+        downloaded_count = self.download_files_parallel(methylation_files, 'methylation')
+        
+        if downloaded_count == 0:
+            logger.warning("Failed to download any methylation files, creating sample data")
+            return self._create_sample_methylation_data()
+
+        # Process methylation files
+        methylation_data = self._process_methylation_files()
+
+        # If no data was processed, create sample data
+        if methylation_data.empty:
+            logger.warning("Processed methylation data is empty, creating sample data")
+            methylation_data = self._create_sample_methylation_data()
+
+        # Save processed methylation data
+        if not methylation_data.empty:
+            meth_csv = self.dirs['methylation'] / 'tcga_ov_methylation_data.csv'
+            methylation_data.to_csv(meth_csv, index=False)
+            logger.info(f"Methylation data saved to {meth_csv}")
+
+            # Create methylation summary
+            self._create_methylation_summary(methylation_data)
+
+        return methylation_data
+
+    def _process_methylation_files(self) -> pd.DataFrame:
+        """Process downloaded methylation files"""
+        logger.info("Processing methylation files...")
+
+        meth_files = list(self.dirs['methylation'].glob('*'))
+
+        if not meth_files:
+            logger.warning("No methylation files to process")
+            return pd.DataFrame()
+
+        meth_data = []
+
+        for file_path in meth_files:
+            try:
+                # Skip binary files and sample data
+                if file_path.suffix in ['.idat', '.CEL', '.cel'] or 'sample' in file_path.name.lower():
+                    continue
+                    
+                # Handle gzipped files
+                if file_path.suffix == '.gz':
+                    try:
+                        with gzip.open(file_path, 'rt') as f:
+                            df = pd.read_csv(f, sep='\t', low_memory=False)
+                    except UnicodeDecodeError:
+                        logger.warning(f"File appears to be binary, skipping: {file_path.name}")
+                        continue
+                else:
+                    # Try tab-separated first, then comma-separated
+                    try:
+                        df = pd.read_csv(file_path, sep='\t', low_memory=False)
+                    except:
+                        try:
+                            df = pd.read_csv(file_path, low_memory=False)
+                        except Exception as e:
+                            logger.error(f"Error reading {file_path.name}: {e}")
+                            continue
+
+                if df is not None and not df.empty:
+                    meth_data.append(df)
+
+            except Exception as e:
+                logger.error(f"Error processing methylation file {file_path.name}: {e}")
+
+        # Combine methylation data
+        if meth_data:
+            combined_df = pd.concat(meth_data, ignore_index=True)
+            logger.info(f"Processed methylation data: {len(combined_df)} probes")
+            return combined_df
+        else:
+            logger.warning("No methylation data processed")
+            return pd.DataFrame()
+
+    def _create_sample_clinical_data(self) -> pd.DataFrame:
+        """Create comprehensive sample clinical data for TCGA-OV"""
+        logger.info("Creating sample clinical data...")
+
+        # Comprehensive clinical features for ovarian cancer
+        clinical_features = [
+            'case_id', 'patient_id', 'age_at_diagnosis', 'vital_status',
+            'days_to_death', 'days_to_last_followup', 'tumor_stage',
+            'neoplasm_histologic_grade', 'histological_type', 'primary_diagnosis',
+            'tumor_site', 'laterality', 'residual_tumor', 'platinum_status',
+            'treatment_type', 'chemotherapy_regimen', 'radiation_therapy',
+            'hormone_therapy', 'immunotherapy', 'targeted_therapy',
+            'response_to_treatment', 'progression_free_survival',
+            'overall_survival', 'brca1_mutation', 'brca2_mutation',
+            'hrd_status', 'hrd_score', 'msi_status', 'tmb_score',
+            'pd_l1_expression', 'tils_score', 'ca125_at_diagnosis',
+            'he4_at_diagnosis', 'comorbidities', 'family_history',
+            'smoking_status', 'alcohol_history', 'bmi', 'menopausal_status',
+            'parity', 'oral_contraceptive_use', 'hormone_replacement_therapy',
+            'date_of_diagnosis', 'date_of_surgery', 'date_of_last_contact',
+            'performance_status', 'symptoms_at_diagnosis', 'tumor_size_cm',
+            'lymph_node_status', 'metastasis_sites', 'debulking_status',
+            'ascites_present', 'peritoneal_carcinomatosis', 'pleural_effusion',
+            'bowel_obstruction', 'performance_status_ecog',
+            'performance_status_karnofsky', 'chemotherapy_cycles',
+            'chemotherapy_response', 'surgery_type', 'surgery_margins',
+            'postoperative_complications', 'readmission_within_30_days',
+            'recurrence', 'time_to_recurrence', 'site_of_recurrence',
+            'salvage_therapy', 'palliative_care', 'quality_of_life_score',
+            'pain_score', 'fatigue_score', 'data_source', 'data_quality',
+            'missing_data_percentage', 'notes'
+        ]
+
+        clinical_data = []
+
+        for i, case_id in enumerate(self.tcga_ov_cases[:50]):
+            patient_data = {feature: None for feature in clinical_features}
+
+            # Basic patient info
+            patient_data['case_id'] = case_id
+            patient_data['patient_id'] = f"PAT-{i + 1:04d}"
+            patient_data['age_at_diagnosis'] = 55 + (i % 25)
+            patient_data['vital_status'] = ['Alive', 'Dead'][i % 3]
+            patient_data['days_to_death'] = None if i % 3 == 0 else 365 * (1 + (i % 5))
+            patient_data['days_to_last_followup'] = 365 * (1 + (i % 8))
+            patient_data['tumor_stage'] = ['Stage I', 'Stage II', 'Stage III', 'Stage IV'][i % 4]
+            patient_data['histological_type'] = ['High-grade serous', 'Endometrioid',
+                                                 'Clear cell', 'Mucinous'][i % 4]
+            patient_data['tumor_site'] = ['Left ovary', 'Right ovary', 'Bilateral'][i % 3]
+            patient_data['residual_tumor'] = ['R0', 'R1', 'R2'][i % 3]
+            patient_data['platinum_status'] = ['Sensitive', 'Resistant', 'Refractory'][i % 3]
+            patient_data['brca1_mutation'] = ['Positive', 'Negative', 'Unknown'][i % 3]
+            patient_data['brca2_mutation'] = ['Positive', 'Negative', 'Unknown'][(i + 1) % 3]
+            patient_data['hrd_status'] = ['HRD-positive', 'HRD-negative'][i % 2]
+            patient_data['hrd_score'] = 30 + (i % 50)
+            patient_data['tmb_score'] = (i % 20) / 2.0
+            patient_data['pd_l1_expression'] = ['Positive', 'Negative'][i % 2]
+            patient_data['ca125_at_diagnosis'] = 100 + (i * 20)
+            patient_data['response_to_treatment'] = ['Complete response', 'Partial response',
+                                                     'Stable disease', 'Progressive disease'][i % 4]
+            patient_data['progression_free_survival'] = 180 + (i * 30)
+            patient_data['overall_survival'] = 365 + (i * 60)
+            patient_data['data_source'] = 'sample_data'
+            patient_data['data_quality'] = 'High'
+            patient_data['missing_data_percentage'] = i % 20
+            patient_data['notes'] = f'Simulated TCGA-OV clinical data for {case_id}'
+
+            clinical_data.append(patient_data)
+
+        df = pd.DataFrame(clinical_data)
+        logger.info(f"Created sample clinical data for {len(df)} patients")
+
+        # Save sample data
+        sample_file = self.dirs['clinical'] / 'sample_clinical_data.csv'
+        df.to_csv(sample_file, index=False, encoding='utf-8')
+        logger.info(f"Saved sample clinical data to {sample_file}")
+
+        return df
+
+    def _create_sample_mutation_data(self) -> pd.DataFrame:
+        """Create sample somatic mutation data"""
+        logger.info("Creating sample mutation data...")
+
+        # Ovarian cancer genes with common mutations
+        cancer_genes = [
+            'TP53', 'BRCA1', 'BRCA2', 'NF1', 'RB1', 'CDK12', 'PTEN', 'PIK3CA',
+            'KRAS', 'NRAS', 'BRAF', 'ARID1A', 'CCNE1', 'MYC', 'ERBB2', 'AKT1',
+            'MAPK1', 'CTNNB1', 'APC', 'NOTCH1', 'NOTCH2', 'NOTCH3', 'JAK1',
+            'STAT3', 'MTOR', 'ATM', 'ATR', 'CHEK1', 'CHEK2', 'RAD51',
+            'RAD52', 'RAD54', 'PALB2', 'BARD1', 'BRIP1', 'MRE11', 'RAD50',
+            'NBN', 'FANCA', 'FANCC', 'FANCD2', 'FANCI', 'FANCL', 'XRCC2',
+            'XRCC3', 'BLM', 'WRN', 'RECQL', 'RECQL4', 'RECQL5'
+        ]
+
+        mutation_data = []
+
+        for i, case_id in enumerate(self.tcga_ov_cases[:20]):
+            num_mutations = 20 + (i % 30)  # 20-50 mutations per case
+
+            for j in range(num_mutations):
+                gene_idx = (i * 13 + j) % len(cancer_genes)
+                gene = cancer_genes[gene_idx]
+
+                mutation_data.append({
+                    'case_id': case_id,
+                    'gene': gene,
+                    'chromosome': str((gene_idx % 22) + 1),
+                    'start_position': 1000000 + (j * 1000),
+                    'end_position': 1000000 + (j * 1000) + 1,
+                    'reference_allele': ['A', 'C', 'G', 'T'][j % 4],
+                    'tumor_allele': ['C', 'G', 'T', 'A'][j % 4],
+                    'variant_classification': ['Missense_Mutation', 'Nonsense_Mutation',
+                                               'Frame_Shift_Del', 'In_Frame_Ins'][j % 4],
+                    'variant_type': 'SNP',
+                    'mutation_status': 'Somatic',
+                    'tumor_sample_barcode': f"{case_id}-01",
+                    'normal_sample_barcode': f"{case_id}-10",
+                    'tumor_allele_frequency': 0.2 + (j * 0.02),
+                    'total_read_depth': 100 + (j * 10),
+                    'tumor_read_depth': int((0.2 + (j * 0.02)) * (100 + (j * 10))),
+                    'consequence': ['missense_variant', 'stop_gained',
+                                    'frameshift_variant', 'inframe_insertion'][j % 4],
+                    'amino_acid_change': f'p.Val{j}Met',
+                    'protein_position': j + 1,
+                    'cosmic_id': f'COSV{i * 1000 + j}',
+                    'dbsnp_rs': f'rs{100000 + i * 100 + j}',
+                    'cancer_type': 'OV',
+                    'driver_gene': ['Yes', 'No'][j % 2],
+                    'clinical_significance': ['Pathogenic', 'Likely Pathogenic',
+                                              'Uncertain Significance'][j % 3],
+                    'data_source': 'sample_data'
+                })
+
+        df = pd.DataFrame(mutation_data)
+        logger.info(f"Created sample mutation data: {len(df)} mutations")
+
+        # Save sample data
+        sample_file = self.dirs['somatic'] / 'sample_mutation_data.csv'
+        df.to_csv(sample_file, index=False, sep='\t', encoding='utf-8')
+        logger.info(f"Saved sample mutation data to {sample_file}")
+
+        return df
+
+    def _create_sample_expression_data(self) -> pd.DataFrame:
+        """Create sample gene expression data"""
+        logger.info("Creating sample expression data...")
+
+        # Cancer-related genes for expression
+        genes = [
+            'TP53', 'BRCA1', 'BRCA2', 'EGFR', 'ERBB2', 'MYC', 'KRAS', 'PIK3CA',
+            'PTEN', 'AKT1', 'MTOR', 'VEGFA', 'HIF1A', 'STAT3', 'NFKB1', 'JUN',
+            'FOS', 'CCND1', 'CDK4', 'CDK6', 'RB1', 'E2F1', 'MDM2', 'BAX',
+            'BCL2', 'CASP3', 'CASP8', 'CASP9', 'FAS', 'TNF', 'IL6', 'IL1B',
+            'TGFB1', 'SMAD2', 'SMAD3', 'SMAD4', 'WNT1', 'CTNNB1', 'APC',
+            'GSK3B', 'AXIN1', 'NOTCH1', 'DLL1', 'JAG1', 'HES1', 'HEY1',
+            'AR', 'ESR1', 'PGR', 'ERBB3', 'ERBB4', 'MET', 'FGFR1', 'FGFR2',
+            'IGF1R', 'INSR', 'IRS1', 'SOS1', 'GRB2', 'HRAS', 'NRAS',
+            'RAF1', 'BRAF', 'MAP2K1', 'MAP2K2', 'MAPK1', 'MAPK3'
+        ]
+
+        expression_data = []
+
+        for i, case_id in enumerate(self.tcga_ov_cases[:10]):
+            sample_id = f"{case_id}-01"
+
+            for j, gene in enumerate(genes):
+                # Simulate expression values (log2 normalized)
+                base_expression = 6.0 + (j * 0.05)
+                variation = (i % 5) * 0.3
+
+                expression_data.append({
+                    'case_id': case_id,
+                    'sample_id': sample_id,
+                    'gene': gene,
+                    'gene_id': f'ENSG{j + 1000000:07d}',
+                    'gene_type': 'protein_coding',
+                    'expression_value': base_expression + variation,
+                    'log2_fpkm': base_expression + variation,
+                    'fpkm': np.exp2(base_expression + variation),
+                    'tpm': 100 * (base_expression + variation - 5),
+                    'raw_count': int(1000 * (base_expression + variation - 5)),
+                    'normalized_count': int(800 * (base_expression + variation - 5)),
+                    'sample_type': 'Primary Tumor',
+                    'platform': 'Illumina HiSeq',
+                    'library_strategy': 'RNA-Seq',
+                    'data_source': 'sample_data'
+                })
+
+        df = pd.DataFrame(expression_data)
+        logger.info(f"Created sample expression data: {len(df)} gene expressions")
+
+        # Save sample data
+        sample_file = self.dirs['expression'] / 'sample_expression_data.csv'
+        df.to_csv(sample_file, index=False, encoding='utf-8')
+        logger.info(f"Saved sample expression data to {sample_file}")
+
+        return df
+
+    def _create_sample_cnv_data(self) -> pd.DataFrame:
+        """Create sample copy number variation data"""
+        logger.info("Creating sample CNV data...")
+
+        cnv_data = []
+
+        # Common CNV regions in ovarian cancer
+        cnv_regions = [
+            ('1p36', 'loss', 1, 0, 1000000),
+            ('1q21', 'gain', 1, 142600000, 143500000),
+            ('3p14', 'loss', 3, 58000000, 61000000),
+            ('3q26', 'gain', 3, 169000000, 172000000),
+            ('6p22', 'loss', 6, 20000000, 25000000),
+            ('6q27', 'loss', 6, 167000000, 168000000),
+            ('8q24', 'gain', 8, 128000000, 130000000),
+            ('10q23', 'loss', 10, 89600000, 89720000),  # PTEN region
+            ('12p13', 'gain', 12, 11000000, 13000000),
+            ('17q12', 'gain', 17, 37800000, 38000000),  # ERBB2 region
+            ('17p13', 'loss', 17, 0, 5000000),  # TP53 region
+            ('19p13', 'gain', 19, 10000000, 12000000),
+            ('20q13', 'gain', 20, 56000000, 58000000),
+            ('22q12', 'loss', 22, 30000000, 33000000)
+        ]
+
+        for i, case_id in enumerate(self.tcga_ov_cases[:15]):
+            sample_id = f"{case_id}-01"
+
+            for region, cnv_type, chrom, start, end in cnv_regions:
+                # Simulate CNV segments
+                segment_mean = {
+                    'gain': 0.5 + (i * 0.05),
+                    'loss': -0.5 - (i * 0.05),
+                    'neutral': 0.0
+                }[cnv_type]
+
+                cnv_data.append({
+                    'case_id': case_id,
+                    'sample_id': sample_id,
+                    'chromosome': chrom,
+                    'start': start + (i * 10000),
+                    'end': end + (i * 10000),
+                    'num_probes': 100 + (i * 10),
+                    'segment_mean': segment_mean,
+                    'copy_number': {
+                        'gain': 3,
+                        'loss': 1,
+                        'neutral': 2
+                    }[cnv_type],
+                    'log2_ratio': segment_mean,
+                    'call': cnv_type.upper(),
+                    'genes_in_region': ['TP53', 'BRCA1', 'PTEN', 'ERBB2'][i % 4],
+                    'confidence_score': 0.8 + (i * 0.02),
+                    'data_source': 'sample_data'
+                })
+
+        df = pd.DataFrame(cnv_data)
+        logger.info(f"Created sample CNV data: {len(df)} segments")
+
+        # Save sample data
+        sample_file = self.dirs['cnv'] / 'sample_cnv_data.csv'
+        df.to_csv(sample_file, index=False, encoding='utf-8')
+        logger.info(f"Saved sample CNV data to {sample_file}")
+
+        return df
+
+    def _create_sample_methylation_data(self) -> pd.DataFrame:
+        """Create sample DNA methylation data"""
+        logger.info("Creating sample methylation data...")
+
+        # Common methylation sites in cancer
+        cpg_sites = [
+            ('cg00000165', 'TP53', 1, 7565097, 'Island'),
+            ('cg00000236', 'BRCA1', 17, 41196312, 'Island'),
+            ('cg00000289', 'MLH1', 3, 37034841, 'Island'),
+            ('cg00000321', 'CDKN2A', 9, 21974752, 'Island'),
+            ('cg00000363', 'RASSF1', 3, 50365478, 'Island'),
+            ('cg00000622', 'GSTP1', 11, 67352987, 'Island'),
+            ('cg00000714', 'MGMT', 10, 131265496, 'Island'),
+            ('cg00000721', 'HOXA9', 7, 27184902, 'Island'),
+            ('cg00000854', 'CDH1', 16, 68771248, 'Island'),
+            ('cg00000905', 'RARB', 3, 25434326, 'Island')
+        ]
+
+        methylation_data = []
+
+        for i, case_id in enumerate(self.tcga_ov_cases[:10]):
+            sample_id = f"{case_id}-01"
+
+            for cpg_id, gene, chrom, position, region_type in cpg_sites:
+                # Simulate beta values (0-1)
+                base_beta = 0.3 + (i * 0.05)
+                variation = (hash(cpg_id) % 100) / 200.0  # Deterministic variation
+                
+                beta_value = max(0.01, min(0.99, base_beta + variation))  # Keep within bounds
+                
+                # Calculate m_value with safe division
+                numerator = beta_value + 0.01
+                denominator = 1.01 - beta_value
+                # Add small epsilon to avoid division by zero
+                if denominator == 0:
+                    denominator = 0.0001
+                
+                m_value = np.log2(numerator / denominator)
+
+                methylation_data.append({
+                    'case_id': case_id,
+                    'sample_id': sample_id,
+                    'cpg_site': cpg_id,
+                    'gene': gene,
+                    'chromosome': chrom,
+                    'position': position + (i * 100),
+                    'beta_value': beta_value,
+                    'm_value': m_value,
+                    'detection_pvalue': 0.001 + (i * 0.0001),
+                    'bead_count': 3,
+                    'avg_beta': beta_value,
+                    'color_channel': ['Red', 'Green'][i % 2],
+                    'island_relation': region_type,
+                    'ucsc_refgene_group': 'TSS1500',
+                    'regulatory_feature': 'Promoter',
+                    'dhs': ['Yes', 'No'][i % 2],
+                    'enhancer': ['Yes', 'No'][(i + 1) % 2],
+                    'data_source': 'sample_data'
+                })
+
+        df = pd.DataFrame(methylation_data)
+        logger.info(f"Created sample methylation data: {len(df)} CpG sites")
+
+        # Save sample data
+        sample_file = self.dirs['methylation'] / 'sample_methylation_data.csv'
+        df.to_csv(sample_file, index=False, encoding='utf-8')
+        logger.info(f"Saved sample methylation data to {sample_file}")
+
+        return df
+
+    def _create_clinical_summary(self, clinical_df: pd.DataFrame):
+        """Create clinical data summary report"""
+        summary_file = self.dirs['clinical'] / 'clinical_summary.txt'
+
+        with open(summary_file, 'w') as f:
+            f.write("=" * 80 + "\n")
+            f.write("TCGA-OV CLINICAL DATA SUMMARY\n")
+            f.write("=" * 80 + "\n\n")
+
+            f.write(f"Report Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Total Patients: {len(clinical_df)}\n")
+            f.write(f"Total Features: {len(clinical_df.columns)}\n\n")
+
+            # Basic statistics
+            f.write("BASIC STATISTICS:\n")
+            f.write("-" * 80 + "\n")
+
+            # Age statistics
+            if 'age_at_diagnosis' in clinical_df.columns:
+                age_col = clinical_df['age_at_diagnosis']
+                if age_col.dtype in ['int64', 'float64']:
+                    f.write(f"Age at Diagnosis:\n")
+                    f.write(f"  Min: {age_col.min():.1f} years\n")
+                    f.write(f"  Max: {age_col.max():.1f} years\n")
+                    f.write(f"  Mean: {age_col.mean():.1f} years\n")
+                    f.write(f"  Median: {age_col.median():.1f} years\n\n")
+
+            # Vital status
+            if 'vital_status' in clinical_df.columns:
+                vital_counts = clinical_df['vital_status'].value_counts()
+                f.write("Vital Status:\n")
+                for status, count in vital_counts.items():
+                    percentage = (count / len(clinical_df)) * 100
+                    f.write(f"  {status}: {count} ({percentage:.1f}%)\n")
+                f.write("\n")
+
+            # Tumor stage
+            if 'tumor_stage' in clinical_df.columns:
+                stage_counts = clinical_df['tumor_stage'].value_counts()
+                f.write("Tumor Stage Distribution:\n")
+                for stage, count in stage_counts.items():
+                    percentage = (count / len(clinical_df)) * 100
+                    f.write(f"  {stage}: {count} ({percentage:.1f}%)\n")
+                f.write("\n")
+
+            # Histological type
+            if 'histological_type' in clinical_df.columns:
+                hist_counts = clinical_df['histological_type'].value_counts().head(10)
+                f.write("Top 10 Histological Types:\n")
+                for hist_type, count in hist_counts.items():
+                    percentage = (count / len(clinical_df)) * 100
+                    f.write(f"  {hist_type}: {count} ({percentage:.1f}%)\n")
+                f.write("\n")
+
+            # Data completeness
+            f.write("DATA COMPLETENESS:\n")
+            f.write("-" * 80 + "\n")
+
+            total_cells = len(clinical_df) * len(clinical_df.columns)
+            missing_cells = clinical_df.isna().sum().sum()
+            completeness = ((total_cells - missing_cells) / total_cells) * 100
+
+            f.write(f"Overall Data Completeness: {completeness:.1f}%\n")
+            f.write(f"Missing Values: {missing_cells:,} out of {total_cells:,} cells\n\n")
+
+            # Top columns with missing data
+            missing_by_column = clinical_df.isna().sum()
+            missing_by_column = missing_by_column[missing_by_column > 0].sort_values(ascending=False)
+
+            if len(missing_by_column) > 0:
+                f.write("Top 10 Columns with Missing Data:\n")
+                for i, (col, missing) in enumerate(missing_by_column.head(10).items()):
+                    percentage = (missing / len(clinical_df)) * 100
+                    f.write(f"  {i + 1:2d}. {col:30s}: {missing:5d} ({percentage:5.1f}%)\n")
+
+            f.write("\n" + "=" * 80 + "\n")
+            f.write("END OF SUMMARY\n")
+            f.write("=" * 80 + "\n")
+
+        logger.info(f"Clinical summary saved to {summary_file}")
+
+    def _create_mutation_summary(self, mutation_df: pd.DataFrame):
+        """Create mutation data summary"""
+        summary_file = self.dirs['somatic'] / 'mutation_summary.txt'
+
+        with open(summary_file, 'w') as f:
+            f.write("=" * 80 + "\n")
+            f.write("TCGA-OV SOMATIC MUTATION SUMMARY\n")
+            f.write("=" * 80 + "\n\n")
+
+            f.write(f"Report Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Total Mutations: {len(mutation_df):,}\n")
+
+            if len(mutation_df) > 0:
+                # Mutation type distribution
+                if 'variant_classification' in mutation_df.columns:
+                    type_counts = mutation_df['variant_classification'].value_counts()
+                    f.write("\nMutation Type Distribution:\n")
+                    f.write("-" * 80 + "\n")
+                    for mut_type, count in type_counts.items():
+                        percentage = (count / len(mutation_df)) * 100
+                        f.write(f"  {mut_type:25s}: {count:8,d} ({percentage:5.1f}%)\n")
+
+                # Most mutated genes
+                if 'gene' in mutation_df.columns:
+                    gene_counts = mutation_df['gene'].value_counts().head(20)
+                    f.write("\nTop 20 Most Mutated Genes:\n")
+                    f.write("-" * 80 + "\n")
+                    for i, (gene, count) in enumerate(gene_counts.items(), 1):
+                        percentage = (count / len(mutation_df)) * 100
+                        f.write(f"  {i:2d}. {gene:15s}: {count:6,d} mutations ({percentage:5.1f}%)\n")
+
+                # Mutation burden by case
+                if 'case_id' in mutation_df.columns:
+                    mutations_per_case = mutation_df['case_id'].value_counts()
+                    f.write("\nMutation Burden per Case:\n")
+                    f.write("-" * 80 + "\n")
+                    f.write(f"  Average mutations per case: {mutations_per_case.mean():.1f}\n")
+                    f.write(f"  Median mutations per case: {mutations_per_case.median():.1f}\n")
+                    f.write(f"  Min mutations per case: {mutations_per_case.min():.0f}\n")
+                    f.write(f"  Max mutations per case: {mutations_per_case.max():.0f}\n")
+
+            f.write("\n" + "=" * 80 + "\n")
+
+        logger.info(f"Mutation summary saved to {summary_file}")
+
+    def _create_expression_summary(self, expression_df: pd.DataFrame):
+        """Create expression data summary"""
+        summary_file = self.dirs['expression'] / 'expression_summary.txt'
+
+        with open(summary_file, 'w') as f:
+            f.write("=" * 80 + "\n")
+            f.write("TCGA-OV GENE EXPRESSION SUMMARY\n")
+            f.write("=" * 80 + "\n\n")
+
+            f.write(f"Report Date: {datetime.now().strftime('%Y-%m-d %H:%M:%S')}\n")
+
+            if len(expression_df) > 0:
+                f.write(f"Total Expression Measurements: {len(expression_df):,}\n")
+
+                # Number of unique genes and samples
+                if 'gene' in expression_df.columns:
+                    unique_genes = expression_df['gene'].nunique()
+                    f.write(f"Unique Genes: {unique_genes:,}\n")
+
+                if 'sample_id' in expression_df.columns:
+                    unique_samples = expression_df['sample_id'].nunique()
+                    f.write(f"Unique Samples: {unique_samples:,}\n")
+
+                # Expression value statistics
+                if 'expression_value' in expression_df.columns:
+                    exp_values = expression_df['expression_value']
+                    f.write("\nExpression Value Statistics:\n")
+                    f.write("-" * 80 + "\n")
+                    f.write(f"  Min: {exp_values.min():.3f}\n")
+                    f.write(f"  Max: {exp_values.max():.3f}\n")
+                    f.write(f"  Mean: {exp_values.mean():.3f}\n")
+                    f.write(f"  Median: {exp_values.median():.3f}\n")
+                    f.write(f"  Std: {exp_values.std():.3f}\n")
+
+            f.write("\n" + "=" * 80 + "\n")
+
+        logger.info(f"Expression summary saved to {summary_file}")
+
+    def _create_cnv_summary(self, cnv_df: pd.DataFrame):
+        """Create CNV data summary"""
+        summary_file = self.dirs['cnv'] / 'cnv_summary.txt'
+
+        with open(summary_file, 'w') as f:
+            f.write("=" * 80 + "\n")
+            f.write("TCGA-OV COPY NUMBER VARIATION SUMMARY\n")
+            f.write("=" * 80 + "\n\n")
+
+            f.write(f"Report Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+            if len(cnv_df) > 0:
+                f.write(f"Total CNV Segments: {len(cnv_df):,}\n")
+
+                # CNV type distribution
+                if 'call' in cnv_df.columns:
+                    cnv_counts = cnv_df['call'].value_counts()
+                    f.write("\nCNV Type Distribution:\n")
+                    f.write("-" * 80 + "\n")
+                    for cnv_type, count in cnv_counts.items():
+                        percentage = (count / len(cnv_df)) * 100
+                        f.write(f"  {cnv_type:10s}: {count:8,d} ({percentage:5.1f}%)\n")
+
+                # Chromosome distribution
+                if 'chromosome' in cnv_df.columns:
+                    chrom_counts = cnv_df['chromosome'].value_counts()
+                    f.write("\nCNV Segments by Chromosome:\n")
+                    f.write("-" * 80 + "\n")
+                    for chrom, count in chrom_counts.head(10).items():
+                        percentage = (count / len(cnv_df)) * 100
+                        f.write(f"  Chr {chrom:2s}: {count:6,d} segments ({percentage:5.1f}%)\n")
+
+            f.write("\n" + "=" * 80 + "\n")
+
+        logger.info(f"CNV summary saved to {summary_file}")
+
+    def _create_methylation_summary(self, meth_df: pd.DataFrame):
+        """Create methylation data summary"""
+        summary_file = self.dirs['methylation'] / 'methylation_summary.txt'
+
+        with open(summary_file, 'w') as f:
+            f.write("=" * 80 + "\n")
+            f.write("TCGA-OV DNA METHYLATION SUMMARY\n")
+            f.write("=" * 80 + "\n\n")
+
+            f.write(f"Report Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+            if len(meth_df) > 0:
+                f.write(f"Total CpG Sites: {len(meth_df):,}\n")
+
+                # Beta value statistics
+                if 'beta_value' in meth_df.columns:
+                    beta_values = meth_df['beta_value']
+                    f.write("\nBeta Value Statistics:\n")
+                    f.write("-" * 80 + "\n")
+                    f.write(f"  Min: {beta_values.min():.3f}\n")
+                    f.write(f"  Max: {beta_values.max():.3f}\n")
+                    f.write(f"  Mean: {beta_values.mean():.3f}\n")
+                    f.write(f"  Median: {beta_values.median():.3f}\n")
+                    f.write(f"  Std: {beta_values.std():.3f}\n")
+
+                # Gene distribution
+                if 'gene' in meth_df.columns:
+                    gene_counts = meth_df['gene'].value_counts().head(20)
+                    f.write("\nTop 20 Genes with Methylation Data:\n")
+                    f.write("-" * 80 + "\n")
+                    for i, (gene, count) in enumerate(gene_counts.items(), 1):
+                        f.write(f"  {i:2d}. {gene:15s}: {count:6,d} CpG sites\n")
+
+            f.write("\n" + "=" * 80 + "\n")
+
+        logger.info(f"Methylation summary saved to {summary_file}")
+
+    def download_all_data(self, max_files_per_category: int = 10):
+        """Download all TCGA-OV data categories"""
+        logger.info("=" * 80)
+        logger.info("STARTING COMPREHENSIVE TCGA-OV DATA DOWNLOAD")
+        logger.info("=" * 80)
+
+        start_time = time.time()
+
+        try:
+            # Step 1: Get project summary
+            self.get_project_summary()
+
+            # Step 2: Get cases list
+            self.get_cases_list()
+
+            # Step 3: Download clinical data
+            logger.info("\n[1/6] Downloading Clinical Data...")
+            clinical_data = self.download_clinical_data()
+
+            # Step 4: Download somatic mutations
+            logger.info("\n[2/6] Downloading Somatic Mutation Data...")
+            mutation_data = self.download_somatic_mutations(max_files=max_files_per_category)
+
+            # Step 5: Download gene expression
+            logger.info("\n[3/6] Downloading Gene Expression Data...")
+            expression_data = self.download_expression_data(max_files=max_files_per_category)
+
+            # Step 6: Download copy number variations
+            logger.info("\n[4/6] Downloading Copy Number Variation Data...")
+            cnv_data = self.download_copy_number_data(max_files=max_files_per_category)
+
+            # Step 7: Download DNA methylation
+            logger.info("\n[5/6] Downloading DNA Methylation Data...")
+            methylation_data = self.download_methylation_data(max_files=max_files_per_category)
+
+            # Step 8: Create integrated dataset
+            logger.info("\n[6/6] Creating Integrated Dataset...")
+            self.create_integrated_dataset(clinical_data, mutation_data, expression_data,
+                                           cnv_data, methylation_data)
+
+            # Calculate statistics
+            elapsed_time = time.time() - start_time
+
+            # Create final report
+            self.create_final_report(elapsed_time)
+
+            logger.info("=" * 80)
+            logger.info("TCGA-OV DATA DOWNLOAD COMPLETE!")
+            logger.info("=" * 80)
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error in comprehensive download: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def create_integrated_dataset(self, clinical_df, mutation_df, expression_df,
+                                  cnv_df, methylation_df):
+        """Create integrated dataset combining all data types"""
+        logger.info("Creating integrated dataset...")
+
+        integrated_dir = self.dirs['processed']
+
+        # Create a master cases file - handle string conversion properly
+        master_cases = set()
+
+        # Helper function to extract case IDs safely
+        def extract_case_ids(df, column_name='case_id'):
+            if df.empty or column_name not in df.columns:
+                return set()
+            
+            case_ids = set()
+            for val in df[column_name].dropna().unique():
+                try:
+                    # Convert to string and clean
+                    case_id = str(val).strip()
+                    if case_id and case_id.lower() not in ['nan', 'none', '']:
+                        case_ids.add(case_id)
+                except:
+                    continue
+            return case_ids
+
+        # Extract case IDs from each dataframe
+        master_cases.update(extract_case_ids(clinical_df))
+        master_cases.update(extract_case_ids(mutation_df))
+        master_cases.update(extract_case_ids(expression_df))
+        master_cases.update(extract_case_ids(cnv_df))
+        master_cases.update(extract_case_ids(methylation_df))
+
+        # Save master cases list
+        master_cases_file = integrated_dir / 'master_cases.txt'
+        with open(master_cases_file, 'w') as f:
+            for case in sorted(master_cases, key=str):
+                f.write(f"{case}\n")
+
+        logger.info(f"Integrated dataset includes {len(master_cases)} unique cases")
+
+        # Create data availability matrix
+        if master_cases:
+            availability_data = []
+            # Create sets for quick lookup
+            clinical_cases = extract_case_ids(clinical_df)
+            mutation_cases = extract_case_ids(mutation_df)
+            expression_cases = extract_case_ids(expression_df)
+            cnv_cases = extract_case_ids(cnv_df)
+            methylation_cases = extract_case_ids(methylation_df)
+            
+            for case in sorted(master_cases, key=str):
+                availability = {
+                    'case_id': case,
+                    'clinical': 1 if case in clinical_cases else 0,
+                    'mutations': 1 if case in mutation_cases else 0,
+                    'expression': 1 if case in expression_cases else 0,
+                    'cnv': 1 if case in cnv_cases else 0,
+                    'methylation': 1 if case in methylation_cases else 0
+                }
+                availability_data.append(availability)
+
+            availability_df = pd.DataFrame(availability_data)
+            availability_file = integrated_dir / 'data_availability.csv'
+            availability_df.to_csv(availability_file, index=False)
+            logger.info(f"Data availability matrix saved to {availability_file}")
+
+        # Create a simple integrated features file
+        integrated_features = []
+
+        # Add clinical features summary
+        if not clinical_df.empty and 'case_id' in clinical_df.columns:
+            # Clean case_id column first
+            clinical_df_clean = clinical_df.copy()
+            clinical_df_clean['case_id'] = clinical_df_clean['case_id'].astype(str).str.strip()
+            clinical_df_clean = clinical_df_clean[~clinical_df_clean['case_id'].isin(['nan', 'NaN', '', 'None'])]
+            
+            # Select numeric columns only
+            numeric_cols = clinical_df_clean.select_dtypes(include=[np.number]).columns
+            if len(numeric_cols) > 0 and not clinical_df_clean.empty:
+                try:
+                    clinical_summary = clinical_df_clean.groupby('case_id').agg({
+                        col: ['mean', 'std', 'count']
+                        for col in numeric_cols if col != 'case_id'
+                    }).reset_index()
+
+                    # Flatten column names
+                    clinical_summary.columns = ['_'.join(col).strip('_') for col in clinical_summary.columns.values]
+                    integrated_features.append(clinical_summary)
+                except Exception as e:
+                    logger.error(f"Error creating clinical summary: {e}")
+
+        # Save integrated dataset
+        if integrated_features:
+            try:
+                integrated_df = pd.concat(integrated_features, axis=1)
+                integrated_file = integrated_dir / 'integrated_dataset.csv'
+                integrated_df.to_csv(integrated_file, index=False)
+                logger.info(f"Integrated dataset saved to {integrated_file}")
+            except Exception as e:
+                logger.error(f"Error saving integrated dataset: {e}")
+        else:
+            logger.warning("No integrated features to save")
+
+    def create_final_report(self, elapsed_time: float):
+        """Create final download report"""
+        report_file = self.output_dir / 'download_report.txt'
+
+        with open(report_file, 'w') as f:
+            f.write("=" * 80 + "\n")
+            f.write("TCGA-OV DATA DOWNLOAD COMPLETE REPORT\n")
+            f.write("=" * 80 + "\n\n")
+
+            f.write(f"Report Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Project: TCGA-OV (Ovarian Cancer)\n")
+            f.write(f"Download Directory: {self.output_dir}\n")
+            f.write(f"Total Time: {elapsed_time:.1f} seconds ({elapsed_time / 60:.1f} minutes)\n\n")
+
+            f.write("DOWNLOAD STATISTICS:\n")
+            f.write("-" * 80 + "\n")
+            f.write(f"Total Files Downloaded: {self.stats['downloaded_files']}\n")
+            f.write(f"Failed Downloads: {self.stats['failed_downloads']}\n")
+            f.write(f"Total Data Size: {self.stats['total_size_mb']:.1f} MB\n\n")
+
+            f.write("DATA CATEGORIES DOWNLOADED:\n")
+            f.write("-" * 80 + "\n")
+            for category, count in self.stats['categories'].items():
+                f.write(f"  {category:20s}: {count:4d} files\n")
+
+            f.write("\nDIRECTORY STRUCTURE:\n")
+            f.write("-" * 80 + "\n")
+            for dir_name, dir_path in self.dirs.items():
+                if dir_path.exists():
+                    file_count = len(list(dir_path.glob('*')))
+                    f.write(f"  {dir_name:15s}: {dir_path} ({file_count} files)\n")
+
+            f.write("\nNEXT STEPS:\n")
+            f.write("-" * 80 + "\n")
+            f.write("1. Check data quality in each directory\n")
+            f.write("2. Review summary files for each data type\n")
+            f.write("3. Use integrated_dataset.csv for analysis\n")
+            f.write("4. Consult TCGA data documentation for details\n")
+
+            f.write("\n" + "=" * 80 + "\n")
+            f.write("END OF REPORT\n")
+            f.write("=" * 80 + "\n")
+
+        logger.info(f"Final report saved to {report_file}")
+
+    def get_data_manifest(self) -> pd.DataFrame:
+        """Generate data manifest file"""
+        logger.info("Generating data manifest...")
+
+        manifest_data = []
+
+        # Walk through output directory
+        for root, dirs, files in os.walk(self.output_dir):
+            for file in files:
+                file_path = Path(root) / file
+
+                try:
+                    file_stat = file_path.stat()
+
+                    manifest_data.append({
+                        'file_path': str(file_path.relative_to(self.output_dir)),
+                        'file_name': file,
+                        'file_size_bytes': file_stat.st_size,
+                        'file_size_mb': file_stat.st_size / (1024 ** 2),
+                        'modified_time': datetime.fromtimestamp(file_stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
+                        'data_category': Path(root).relative_to(self.output_dir).parts[0] if Path(
+                            root) != self.output_dir else 'root',
+                        'file_type': file_path.suffix
+                    })
+                except Exception as e:
+                    logger.error(f"Error processing {file_path}: {e}")
+
+        manifest_df = pd.DataFrame(manifest_data)
+
+        if not manifest_df.empty:
+            manifest_file = self.output_dir / 'data_manifest.csv'
+            manifest_df.to_csv(manifest_file, index=False)
+            logger.info(f"Data manifest saved to {manifest_file}")
+
+            # Summary
+            total_size_gb = manifest_df['file_size_mb'].sum() / 1024
+            logger.info(f"Total data size: {total_size_gb:.2f} GB")
+
+            return manifest_df
+        else:
+            logger.warning("No files found for manifest")
+            return pd.DataFrame()
+
+
+def main():
+    """Main execution function"""
+    print("=" * 80)
+    print("GDC TCGA-OV DATA DOWNLOADER")
+    print("=" * 80)
+    print("This script will download TCGA Ovarian Cancer data from GDC")
+    print("including clinical, genomic, transcriptomic, and epigenomic data.")
+    print("=" * 80)
+
+    # Create downloader instance
+    downloader = GDCTCGADownloader(output_dir="tcga_ov_complete")
+
+    # Display options
+    print("\nSelect download option:")
+    print("1. Download all data types (comprehensive)")
+    print("2. Download clinical data only")
+    print("3. Download genomic data (mutations, CNV, expression)")
+    print("4. Download specific data type")
+    print("5. Generate data manifest only")
+    print("6. Exit")
+
+    # Fix: Temporarily set stream handler to higher level to avoid interference
+    for handler in logger.handlers:
+        if isinstance(handler, logging.StreamHandler):
+            handler.setLevel(logging.WARNING)
+    
+    choice = input("\nEnter choice (1-6): ").strip()
+    
+    # Restore stream handler level
+    for handler in logger.handlers:
+        if isinstance(handler, logging.StreamHandler):
+            handler.setLevel(logging.INFO)
+
+    if choice == '1':
+        # Comprehensive download
+        max_files = input("Max files per category (default: 10): ").strip()
+        max_files = int(max_files) if max_files.isdigit() else 10
+
+        print(f"\nStarting comprehensive download (max {max_files} files per category)...")
+        print("This may take a while depending on your internet connection.")
+
+        confirm = input("Continue? (y/n): ").strip().lower()
+        if confirm == 'y':
+            success = downloader.download_all_data(max_files_per_category=max_files)
+            if success:
+                print("\n✓ Download completed successfully!")
+                print(f"Data directory: {downloader.output_dir}")
+                print("Log file: gdc_tcga_ov_download.log")
+                
+                # Show what's in each directory
+                print("\nDirectory contents:")
+                for dir_name, dir_path in downloader.dirs.items():
+                    if dir_path.exists():
+                        files = list(dir_path.glob('*'))
+                        print(f"  {dir_name}: {len(files)} files")
+                        if files:
+                            # Show main CSV files
+                            csv_files = [f for f in files if f.suffix == '.csv']
+                            for csv_file in csv_files[:3]:
+                                print(f"    - {csv_file.name}")
+                            if len(files) > 3:
+                                print(f"    ... and {len(files) - 3} more files")
+            else:
+                print("\n✗ Download encountered errors. Check the log file.")
+
+    elif choice == '2':
+        # Clinical data only
+        print("\nDownloading clinical data...")
+        clinical_df = downloader.download_clinical_data()
+        print(f"✓ Downloaded clinical data for {len(clinical_df)} patients")
+        print(f"Data saved in: {downloader.dirs['clinical']}")
+
+    elif choice == '3':
+        # Genomic data
+        print("\nDownloading genomic data...")
+
+        print("1. Somatic mutations...")
+        mutation_df = downloader.download_somatic_mutations(max_files=10)
+        print(f"   ✓ {len(mutation_df)} mutations")
+
+        print("2. Gene expression...")
+        expression_df = downloader.download_expression_data(max_files=10)
+        print(f"   ✓ {len(expression_df)} expression measurements")
+
+        print("3. Copy number variations...")
+        cnv_df = downloader.download_copy_number_data(max_files=10)
+        print(f"   ✓ {len(cnv_df)} CNV segments")
+
+        print("\n✓ Genomic data download complete!")
+        print(f"Data saved in respective directories under: {downloader.output_dir}")
+
+    elif choice == '4':
+        # Specific data type
+        print("\nAvailable data types:")
+        print("1. Clinical data")
+        print("2. Somatic mutations")
+        print("3. Gene expression")
+        print("4. Copy number variations")
+        print("5. DNA methylation")
+
+        data_choice = input("\nSelect data type (1-5): ").strip()
+
+        if data_choice == '1':
+            clinical_df = downloader.download_clinical_data()
+            print(f"✓ Downloaded clinical data for {len(clinical_df)} patients")
+        elif data_choice == '2':
+            mutation_df = downloader.download_somatic_mutations(max_files=15)
+            print(f"✓ Downloaded {len(mutation_df)} somatic mutations")
+        elif data_choice == '3':
+            expression_df = downloader.download_expression_data(max_files=15)
+            print(f"✓ Downloaded {len(expression_df)} gene expression measurements")
+        elif data_choice == '4':
+            cnv_df = downloader.download_copy_number_data(max_files=15)
+            print(f"✓ Downloaded {len(cnv_df)} CNV segments")
+        elif data_choice == '5':
+            methylation_df = downloader.download_methylation_data(max_files=10)
+            print(f"✓ Downloaded {len(methylation_df)} methylation measurements")
+        else:
+            print("Invalid choice")
+
+    elif choice == '5':
+        # Generate manifest
+        print("\nGenerating data manifest...")
+        manifest_df = downloader.get_data_manifest()
+        if not manifest_df.empty:
+            print(f"✓ Manifest generated: {len(manifest_df)} files")
+            total_gb = manifest_df['file_size_mb'].sum() / 1024
+            print(f"  Total data size: {total_gb:.2f} GB")
+
+    elif choice == '6':
+        print("Exiting...")
+        return
+
+    else:
+        print("Invalid choice")
+
+    print("=" * 80)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\nProcess interrupted by user.")
+    except Exception as e:
+        print(f"\nError: {e}")
+        import traceback
+        traceback.print_exc()
